@@ -1,0 +1,13 @@
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.iml
+
+# Each Flutter project (dating_app/, admin_dashboard/) has its own
+# .gitignore for build/, .dart_tool/, etc. — this file only covers
+# things at the workspace root.

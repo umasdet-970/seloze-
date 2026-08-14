@@ -1,0 +1,223 @@
+import 'dart:ui';
+
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../data/models/notification_item.dart';
+import '../../../data/models/profile.dart';
+import '../../../data/models/subscription_models.dart';
+import '../../discover/providers/discover_providers.dart';
+import '../../notifications/providers/notification_providers.dart';
+import '../../subscription/providers/subscription_providers.dart';
+import '../providers/likes_providers.dart';
+
+/// "Who liked you" (spec section 5). Free users get a blurred teaser with
+/// an upgrade CTA; Premium users can like back directly (an instant
+/// match, since these people already liked the current user).
+class LikesScreen extends ConsumerWidget {
+  const LikesScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final likesAsync = ref.watch(receivedLikesProvider);
+    final tier = ref.watch(subscriptionTierProvider);
+    final isPremium = tier == SubscriptionTier.premium;
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Likes', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            const Text('People who liked your profile', style: TextStyle(color: AppColors.textMuted)),
+            const SizedBox(height: 20),
+            Expanded(
+              child: likesAsync.when(
+                data: (profiles) {
+                  if (profiles.isEmpty) {
+                    return const Center(
+                      child: Text('No likes yet — keep swiping in Discover!', style: TextStyle(color: AppColors.textMuted)),
+                    );
+                  }
+                  final grid = GridView.builder(
+                    itemCount: profiles.length,
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
+                      childAspectRatio: 0.72,
+                    ),
+                    itemBuilder: (context, index) => _LikeTile(
+                      profile: profiles[index],
+                      interactive: isPremium,
+                    ),
+                  );
+
+                  if (isPremium) return grid;
+
+                  return Stack(
+                    children: [
+                      Positioned.fill(
+                        child: ImageFiltered(
+                          imageFilter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                          child: grid,
+                        ),
+                      ),
+                      Positioned.fill(
+                        child: Container(
+                          alignment: Alignment.center,
+                          color: Colors.black.withOpacity(0.15),
+                          child: Card(
+                            margin: const EdgeInsets.symmetric(horizontal: 32),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.lock_outline, size: 32, color: AppColors.primary),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    '${profiles.length} ${profiles.length == 1 ? 'person likes' : 'people like'} you',
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  const Text(
+                                    'Upgrade to Premium to see who and match instantly.',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  FilledButton(
+                                    onPressed: () => context.push('/paywall'),
+                                    child: const Text('Upgrade to Premium'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (err, _) => Center(child: Text('Something went wrong: $err')),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LikeTile extends ConsumerStatefulWidget {
+  final Profile profile;
+  final bool interactive;
+  const _LikeTile({required this.profile, required this.interactive});
+
+  @override
+  ConsumerState<_LikeTile> createState() => _LikeTileState();
+}
+
+class _LikeTileState extends ConsumerState<_LikeTile> {
+  bool _busy = false;
+
+  Future<void> _likeBack() async {
+    setState(() => _busy = true);
+    final uid = ref.read(currentUserIdProvider);
+    final result = await ref.read(socialRepositoryProvider).like(uid, widget.profile.id);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (result.matched) {
+      ref.read(notificationRepositoryProvider).add(
+            uid,
+            NotificationType.mutualMatch,
+            "It's a match! 🎉",
+            'You and ${widget.profile.name} liked each other. Say hi!',
+          );
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text("It's a Match! 🎉"),
+          content: Text('You and ${widget.profile.name} liked each other.'),
+          actions: [FilledButton(onPressed: () => Navigator.pop(context), child: const Text('Nice!'))],
+        ),
+      );
+    }
+  }
+
+  Future<void> _pass() async {
+    setState(() => _busy = true);
+    await ref.read(socialRepositoryProvider).pass(ref.read(currentUserIdProvider), widget.profile.id);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final profile = widget.profile;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          CachedNetworkImage(
+            imageUrl: profile.photoUrls.isNotEmpty ? profile.photoUrls.first : '',
+            fit: BoxFit.cover,
+            errorWidget: (_, __, ___) => Container(color: Colors.grey.shade300),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(10, 24, 10, 8),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Colors.transparent, Colors.black.withOpacity(0.85)],
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('${profile.name}, ${profile.age}',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis),
+                  if (widget.interactive) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        _miniButton(icon: Icons.close, color: Colors.white, onTap: _busy ? null : _pass),
+                        _miniButton(icon: Icons.favorite, color: AppColors.like, onTap: _busy ? null : _likeBack),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _miniButton({required IconData icon, required Color color, required VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: CircleAvatar(
+        radius: 16,
+        backgroundColor: Colors.white,
+        child: Icon(icon, size: 16, color: color),
+      ),
+    );
+  }
+}
