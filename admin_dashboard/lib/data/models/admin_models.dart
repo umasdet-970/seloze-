@@ -31,6 +31,11 @@ class AdminUser {
   final SubscriptionTier tier;
   final bool isVerified;
   final int reportCount;
+  // Automated suspicious-profile score (spec section 3/12/19), computed
+  // once by dating_app's ProfileRiskScorer at profile-save time and read
+  // here as-is — see firestore_admin_repository.dart's doc comment.
+  final int riskScore;
+  final List<String> riskSignals;
 
   const AdminUser({
     required this.id,
@@ -42,6 +47,8 @@ class AdminUser {
     required this.tier,
     required this.isVerified,
     required this.reportCount,
+    this.riskScore = 0,
+    this.riskSignals = const [],
   });
 
   AdminUser copyWith({AccountStatus? status, bool? isVerified}) {
@@ -55,6 +62,8 @@ class AdminUser {
       tier: tier,
       isVerified: isVerified ?? this.isVerified,
       reportCount: reportCount,
+      riskScore: riskScore,
+      riskSignals: riskSignals,
     );
   }
 }
@@ -123,6 +132,7 @@ class CountryStat {
 class DashboardStats {
   final int totalUsers;
   final int dailyActiveUsers;
+  final int monthlyActiveUsers;
   final int newRegistrationsToday;
   final int freeUsers;
   final int premiumUsers;
@@ -134,6 +144,7 @@ class DashboardStats {
   const DashboardStats({
     required this.totalUsers,
     required this.dailyActiveUsers,
+    required this.monthlyActiveUsers,
     required this.newRegistrationsToday,
     required this.freeUsers,
     required this.premiumUsers,
@@ -164,6 +175,30 @@ class AcquisitionSource {
   const AcquisitionSource({required this.channel, required this.users});
 }
 
+/// One admin moderation action (spec section 20: "Audit logs"). Written
+/// automatically by AdminRepository whenever setUserStatus/setVerified/
+/// resolveReport run — never editable, so it stays a trustworthy record
+/// of who did what and when, not just what the current state is.
+class AuditLogEntry {
+  final String id;
+  final String adminEmail;
+  final String action;
+  final String targetUserId;
+  final String targetUserName;
+  final String details;
+  final DateTime createdAt;
+
+  const AuditLogEntry({
+    required this.id,
+    required this.adminEmail,
+    required this.action,
+    required this.targetUserId,
+    required this.targetUserName,
+    required this.details,
+    required this.createdAt,
+  });
+}
+
 /// Illustrative growth metrics — a real CAC/LTV needs ad-spend data from
 /// Meta/Google/YouTube ad accounts and observed revenue per cohort over
 /// time, neither of which exist without those integrations.
@@ -172,11 +207,13 @@ class GrowthMetrics {
   final double ltvInr;
   final double monthlyChurnPct;
   final double premiumConversionPct;
+  final double adFreeConversionPct;
 
   const GrowthMetrics({
     required this.cacInr,
     required this.ltvInr,
     required this.monthlyChurnPct,
     required this.premiumConversionPct,
+    required this.adFreeConversionPct,
   });
 }

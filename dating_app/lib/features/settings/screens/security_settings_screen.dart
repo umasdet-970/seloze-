@@ -22,12 +22,20 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
       return;
     }
     setState(() => _sending = true);
-    await ref.read(authRepositoryProvider).sendPasswordResetEmail(user!.email!);
-    if (mounted) {
-      setState(() => _sending = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Password reset link sent to ${user.email}.')),
-      );
+    try {
+      await ref.read(authRepositoryProvider).sendPasswordResetEmail(user!.email!);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Password reset link sent to ${user.email}.')),
+        );
+      }
+    } catch (e) {
+      // Without this, a failure here left `_sending` true forever —
+      // `onTap` is gated on `!_sending`, so this tile would be
+      // permanently disabled after one failed attempt.
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    } finally {
+      if (mounted) setState(() => _sending = false);
     }
   }
 

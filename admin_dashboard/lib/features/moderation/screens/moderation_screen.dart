@@ -15,6 +15,7 @@ class ModerationScreen extends ConsumerWidget {
     final reports = ref.watch(reportQueueProvider);
     final pending = reports.where((r) => r.status == ReportStatus.pending).toList();
     final resolved = reports.where((r) => r.status == ReportStatus.resolved).toList();
+    final flagged = ref.watch(flaggedProfilesProvider);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(28),
@@ -32,6 +33,21 @@ class ModerationScreen extends ConsumerWidget {
             const SizedBox(height: 8),
             for (final r in resolved) _ReportCard(report: r),
           ],
+          const SizedBox(height: 32),
+          const Text('Flagged profiles', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          const Text(
+            'Automated suspicious-profile detection — no one reported these, '
+            'the signals below were computed when the profile was saved.',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+          ),
+          const SizedBox(height: 4),
+          Text('${flagged.length} awaiting review', style: const TextStyle(color: AppColors.textMuted)),
+          const SizedBox(height: 16),
+          if (flagged.isEmpty)
+            const Text('Nothing flagged right now.', style: TextStyle(color: AppColors.textMuted))
+          else
+            for (final u in flagged) _FlaggedProfileCard(user: u),
         ],
       ),
     );
@@ -120,6 +136,83 @@ class _ReportCard extends ConsumerWidget {
             )
           else
             Text('Action: ${report.actionTaken?.label ?? '—'}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+}
+
+class _FlaggedProfileCard extends ConsumerWidget {
+  final AdminUser user;
+  const _FlaggedProfileCard({required this.user});
+
+  Color _riskColor() {
+    if (user.riskScore >= 50) return AppColors.danger;
+    if (user.riskScore >= 25) return AppColors.warning;
+    return AppColors.textMuted;
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _riskColor().withOpacity(0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(user.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(color: _riskColor().withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
+                child: Text(
+                  'Risk ${user.riskScore}',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _riskColor()),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(user.email, style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+          if (user.riskSignals.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: user.riskSignals
+                  .map((s) => Chip(label: Text(s, style: const TextStyle(fontSize: 11)), visualDensity: VisualDensity.compact))
+                  .toList(),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              OutlinedButton(
+                onPressed: () => ref.read(adminRepositoryProvider).setVerified(user.id, true),
+                child: const Text('Verify (legitimate)'),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton(
+                style: OutlinedButton.styleFrom(foregroundColor: Colors.orange),
+                onPressed: () => ref.read(adminRepositoryProvider).setUserStatus(user.id, AccountStatus.suspended),
+                child: const Text('Suspend'),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+                onPressed: () => ref.read(adminRepositoryProvider).setUserStatus(user.id, AccountStatus.banned),
+                child: const Text('Ban'),
+              ),
+            ],
+          ),
         ],
       ),
     );

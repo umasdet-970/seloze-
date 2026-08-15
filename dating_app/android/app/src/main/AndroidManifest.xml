@@ -13,6 +13,13 @@
          FCM push. firebase_messaging's own manifest merge usually adds
          this, but declaring it explicitly avoids depending on that. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Real geo-distance in Discover (spec section 4/15) — geolocator's
+         own manifest merge would add these automatically, but declared
+         explicitly here for the same reason as every other permission in
+         this file: don't depend on a plugin's manifest merge behavior.
+         Coarse is enough for "how many km away" — fine isn't requested,
+         since this app has no use for street-level precision. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
 
     <application
         android:label="Connect"
@@ -45,6 +52,12 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- Google's public TEST AdMob app ID (see lib/core/config/ad_config.dart) —
+             required for the SDK to initialize at all, even with test ad units.
+             Replace with your real AdMob app ID before a real launch. -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-3940256099942544~3347511713" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

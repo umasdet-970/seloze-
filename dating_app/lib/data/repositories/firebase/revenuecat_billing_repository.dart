@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/config/backend_config.dart';
 import '../../models/subscription_models.dart';
 import '../billing_repository.dart';
 
@@ -45,8 +47,30 @@ class RevenueCatBillingRepository implements BillingRepository {
   final Set<String> _loggedIn = {};
 
   void _onCustomerInfoUpdated(CustomerInfo info) {
-    _cache[info.originalAppUserId] = _recordFromCustomerInfo(info);
+    final record = _recordFromCustomerInfo(info);
+    _cache[info.originalAppUserId] = record;
     _controller.add(null);
+    unawaited(_syncTierToFirestore(info.originalAppUserId, record));
+  }
+
+  /// Best-effort write-back so the admin dashboard (a Firestore-only
+  /// client with no RevenueCat access of its own) can show real tier
+  /// counts and an estimated MRR instead of fabricated numbers. Not a
+  /// substitute for RevenueCat webhooks — see BILLING_SETUP.md — this
+  /// only reflects entitlement state this device has actually observed,
+  /// so it can lag a cancellation/renewal that happened elsewhere until
+  /// the app is next opened.
+  Future<void> _syncTierToFirestore(String uid, SubscriptionRecord record) async {
+    if (!kUseFirebase || uid.isEmpty) return;
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(uid).set(
+        {'subscriptionTier': record.tier.name},
+        SetOptions(merge: true),
+      );
+    } catch (_) {
+      // Non-critical: admin stats staying a step behind isn't worth
+      // surfacing an error from a billing-state listener callback.
+    }
   }
 
   SubscriptionRecord _recordFromCustomerInfo(CustomerInfo info) {
@@ -66,10 +90,20 @@ class RevenueCatBillingRepository implements BillingRepository {
   Future<void> _ensureLoggedIn(String uid) async {
     if (_loggedIn.contains(uid) || uid.isEmpty) return;
     _loggedIn.add(uid);
-    // Links RevenueCat's (initially anonymous) app user id to our own
-    // Firebase uid, so purchases follow the signed-in user across devices.
-    final result = await Purchases.logIn(uid);
-    _cache[uid] = _recordFromCustomerInfo(result.customerInfo);
+    try {
+      // Links RevenueCat's (initially anonymous) app user id to our own
+      // Firebase uid, so purchases follow the signed-in user across devices.
+      final result = await Purchases.logIn(uid);
+      _cache[uid] = _recordFromCustomerInfo(result.customerInfo);
+    } catch (e) {
+      // Without this, a transient failure (offline on first launch,
+      // RevenueCat misconfigured) would mark this uid "already logged
+      // in" forever — every later call becomes a silent no-op that
+      // never retries, permanently stuck showing Free tier even once
+      // connectivity/config is fixed.
+      _loggedIn.remove(uid);
+      rethrow;
+    }
   }
 
   @override
@@ -77,7 +111,12 @@ class RevenueCatBillingRepository implements BillingRepository {
 
   @override
   SubscriptionRecord currentSubscription(String uid) {
-    unawaited(_ensureLoggedIn(uid));
+    // `currentSubscription` is a synchronous getter called from UI
+    // builds — a login failure has to be swallowed here (not left
+    // unhandled), unlike purchase()/restorePurchases() below, which
+    // `await _ensureLoggedIn` directly and want the error to propagate
+    // to whoever tapped "Subscribe"/"Restore".
+    unawaited(_ensureLoggedIn(uid).catchError((_) {}));
     return _cache[uid] ?? const SubscriptionRecord();
   }
 
@@ -101,8 +140,10 @@ class RevenueCatBillingRepository implements BillingRepository {
     // purchasePackage returns the CustomerInfo directly (unlike logIn,
     // which wraps it in a {customerInfo, created} result).
     final info = await Purchases.purchasePackage(package);
-    _cache[uid] = _recordFromCustomerInfo(info);
+    final record = _recordFromCustomerInfo(info);
+    _cache[uid] = record;
     _controller.add(null);
+    unawaited(_syncTierToFirestore(uid, record));
   }
 
   @override
@@ -127,7 +168,9 @@ class RevenueCatBillingRepository implements BillingRepository {
   Future<void> restorePurchases(String uid) async {
     await _ensureLoggedIn(uid);
     final info = await Purchases.restorePurchases();
-    _cache[uid] = _recordFromCustomerInfo(info);
+    final record = _recordFromCustomerInfo(info);
+    _cache[uid] = record;
     _controller.add(null);
+    unawaited(_syncTierToFirestore(uid, record));
   }
 }

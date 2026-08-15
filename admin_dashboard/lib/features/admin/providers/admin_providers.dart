@@ -1,8 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/config/backend_config.dart';
 import '../../../data/models/admin_models.dart';
 import '../../../data/repositories/admin_repository.dart';
+import '../../../data/repositories/firebase/firestore_admin_repository.dart';
 
-final adminRepositoryProvider = Provider<AdminRepository>((ref) => MockAdminRepository());
+final adminRepositoryProvider = Provider<AdminRepository>((ref) {
+  return kUseFirebase ? FirestoreAdminRepository() : MockAdminRepository();
+});
 
 final _adminTickProvider = StreamProvider<void>((ref) => ref.watch(adminRepositoryProvider).changes());
 
@@ -32,6 +36,16 @@ final userSearchResultsProvider = Provider<List<AdminUser>>((ref) {
 final reportQueueProvider = Provider<List<ReportQueueItem>>((ref) {
   ref.watch(_adminTickProvider);
   return ref.watch(adminRepositoryProvider).reportQueue();
+});
+
+final flaggedProfilesProvider = Provider<List<AdminUser>>((ref) {
+  ref.watch(_adminTickProvider);
+  return ref.watch(adminRepositoryProvider).flaggedProfiles();
+});
+
+final auditLogProvider = Provider<List<AuditLogEntry>>((ref) {
+  ref.watch(_adminTickProvider);
+  return ref.watch(adminRepositoryProvider).auditLog();
 });
 
 final registrationFunnelProvider = Provider<List<FunnelStep>>((ref) {

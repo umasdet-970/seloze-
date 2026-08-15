@@ -35,7 +35,15 @@ class BlockedUsersScreen extends ConsumerWidget {
                 ),
                 title: Text(profile.name),
                 trailing: TextButton(
-                  onPressed: () => ref.read(socialRepositoryProvider).unblock(ref.read(currentUserIdProvider), profile.id),
+                  onPressed: () async {
+                    try {
+                      await ref.read(socialRepositoryProvider).unblock(ref.read(currentUserIdProvider), profile.id);
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+                      }
+                    }
+                  },
                   child: const Text('Unblock'),
                 ),
               );

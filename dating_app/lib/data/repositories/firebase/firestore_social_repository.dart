@@ -13,12 +13,17 @@ String _todayKey() {
 
 /// Firestore schema (see FIREBASE_SETUP.md for indexes/rules):
 ///   users/{uid}/swipes/{targetId}         {type: 'like'|'pass', createdAt}
-///   users/{uid}/likesReceived/{fromId}    {createdAt}  -- pending, not yet matched
-///   users/{uid}/matches/{otherId}         {matchedAt}
+///   users/{uid}/likesReceived/{fromId}    {createdAt, fromUserId}  -- pending, not yet matched
+///   users/{uid}/matches/{otherId}         {matchedAt, otherUserId}
 ///   users/{uid}/blocked/{targetId}        {targetId, createdAt}
 ///   users/{uid}/reported/{targetId}       {reason, details, createdAt}
 ///   users/{uid}/private/quota             {date, shownIds}
 ///   reports/{autoId}                      {reporterId, targetId, reason, details, createdAt} -- admin dashboard
+///
+/// `otherUserId`/`fromUserId` duplicate each doc's own ID as a queryable
+/// field — collection-group queries can't filter on document ID, and
+/// `cleanupUserOnDelete` (see functions/) needs to find every match/
+/// pending-like doc across ALL users that references a just-deleted uid.
 ///
 /// Every synchronous getter in [SocialRepository] is backed by a local
 /// cache kept current by a Firestore listener started the first time that
@@ -30,6 +35,12 @@ class FirestoreSocialRepository implements SocialRepository {
   final FirebaseFirestore _firestore;
   final _controller = StreamController<void>.broadcast();
   final _reportLimiter = RateLimiter(maxEvents: 5, window: const Duration(minutes: 10));
+  // Bot detection (spec section 12/19) — see MockSocialRepository's copy
+  // of this same limiter for the reasoning. A real hardening pass would
+  // enforce this server-side too (Cloud Function or Firestore rules can't
+  // easily rate-limit by themselves), same caveat as every other
+  // client-side rate limiter in this app.
+  final _swipeLimiter = RateLimiter(maxEvents: 40, window: const Duration(minutes: 2));
 
   final Map<String, Set<String>> _swipedCache = {};
   final Map<String, Set<String>> _blockedByMeCache = {};
@@ -154,18 +165,25 @@ class FirestoreSocialRepository implements SocialRepository {
     final updated = {...current, profileId};
     // Update the cache immediately (synchronous callers read it right
     // after calling this), then persist in the background — matches the
-    // interface's fire-and-forget (non-Future) contract.
+    // interface's fire-and-forget (non-Future) contract. `catchError`
+    // matters here too: this fires on every profile shown in Discover
+    // (i.e. every swipe), so it's the highest-frequency write in the
+    // app — a transient failure without a handler would be the most
+    // likely source of unhandled zone errors under real-world flakiness.
     _quotaCache[uid] = (date: today, shownIds: updated);
     unawaited(
       _firestore.collection('users').doc(uid).collection('private').doc('quota').set({
         'date': today,
         'shownIds': updated.toList(),
-      }),
+      }).catchError((_) {}),
     );
   }
 
   @override
   Future<LikeResult> like(String uid, String targetId) async {
+    if (!_swipeLimiter.allow(uid)) {
+      throw RateLimitException("You're swiping too fast — please slow down.");
+    }
     await _userSub(uid, 'swipes').doc(targetId).set({'type': 'like', 'createdAt': FieldValue.serverTimestamp()});
 
     final matched = await _firestore.runTransaction<bool>((transaction) async {
@@ -174,12 +192,24 @@ class FirestoreSocialRepository implements SocialRepository {
 
       if (receivedSnap.exists) {
         final now = FieldValue.serverTimestamp();
-        transaction.set(_userSub(uid, 'matches').doc(targetId), {'matchedAt': now});
-        transaction.set(_userSub(targetId, 'matches').doc(uid), {'matchedAt': now});
+        // `otherUserId` duplicates the document ID as a queryable field —
+        // Firestore can't filter a collection-group query on document ID
+        // directly, so without this, `cleanupUserOnDelete` (see
+        // functions/) has no way to find "every match doc that
+        // references uid X" when X's account is deleted, across every
+        // other user's `matches` subcollection.
+        transaction.set(_userSub(uid, 'matches').doc(targetId), {'matchedAt': now, 'otherUserId': targetId});
+        transaction.set(_userSub(targetId, 'matches').doc(uid), {'matchedAt': now, 'otherUserId': uid});
         transaction.delete(receivedRef);
         return true;
       } else {
-        transaction.set(_userSub(targetId, 'likesReceived').doc(uid), {'createdAt': FieldValue.serverTimestamp()});
+        // Same reasoning as `otherUserId` above, for the same cleanup
+        // function's benefit — finds "every pending like FROM uid X"
+        // across other users' `likesReceived` subcollections.
+        transaction.set(_userSub(targetId, 'likesReceived').doc(uid), {
+          'createdAt': FieldValue.serverTimestamp(),
+          'fromUserId': uid,
+        });
         return false;
       }
     });
@@ -189,6 +219,9 @@ class FirestoreSocialRepository implements SocialRepository {
 
   @override
   Future<void> pass(String uid, String targetId) async {
+    if (!_swipeLimiter.allow(uid)) {
+      throw RateLimitException("You're swiping too fast — please slow down.");
+    }
     await _userSub(uid, 'swipes').doc(targetId).set({'type': 'pass', 'createdAt': FieldValue.serverTimestamp()});
   }
 

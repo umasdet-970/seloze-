@@ -6,9 +6,27 @@
       "fields": [{ "fieldPath": "targetId", "order": "ASCENDING" }]
     },
     {
+      "collectionGroup": "matches",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [{ "fieldPath": "otherUserId", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "likesReceived",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [{ "fieldPath": "fromUserId", "order": "ASCENDING" }]
+    },
+    {
       "collectionGroup": "users",
       "queryScope": "COLLECTION",
       "fields": [{ "fieldPath": "profileComplete", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "createdAt", "order": "ASCENDING" },
+        { "fieldPath": "lastActiveAt", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

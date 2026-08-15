@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/config/backend_config.dart';
+import '../../../data/repositories/firebase/cloud_moderation_repository.dart';
 import '../../../data/repositories/moderation_repository.dart';
 
-/// Swap MockModerationRepository() -> a hosted AI moderation API client
-/// once one is integrated (roadmap: AI/automation phase).
-final moderationRepositoryProvider = Provider<ModerationRepository>((ref) => MockModerationRepository());
+final moderationRepositoryProvider = Provider<ModerationRepository>((ref) {
+  return kUseCloudModeration ? CloudModerationRepository() : MockModerationRepository();
+});

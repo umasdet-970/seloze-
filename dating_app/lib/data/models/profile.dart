@@ -15,6 +15,10 @@ class Profile {
   final List<String> photoUrls;
   final List<String> interests;
   final String city;
+  // Kept separate from `city` (a free-text "City, Country" hint in the UI)
+  // so the admin dashboard can group users by country exactly (spec
+  // section 16/17: country-wise statistics) instead of parsing free text.
+  final String country;
   final double distanceKm;
   final bool isOnline;
   final bool isVerified;
@@ -31,6 +35,7 @@ class Profile {
     required this.photoUrls,
     required this.interests,
     this.city = '',
+    this.country = '',
     required this.distanceKm,
     this.isOnline = false,
     this.isVerified = false,
@@ -49,6 +54,7 @@ class Profile {
       photoUrls: List<String>.from(map['photoUrls'] as List? ?? []),
       interests: List<String>.from(map['interests'] as List? ?? []),
       city: map['city'] as String? ?? '',
+      country: map['country'] as String? ?? '',
       distanceKm: (map['distanceKm'] as num?)?.toDouble() ?? 0,
       isOnline: map['isOnline'] as bool? ?? false,
       isVerified: map['isVerified'] as bool? ?? false,
@@ -66,6 +72,7 @@ class Profile {
         'photoUrls': photoUrls,
         'interests': interests,
         'city': city,
+        'country': country,
         'distanceKm': distanceKm,
         'isOnline': isOnline,
         'isVerified': isVerified,
@@ -82,6 +89,7 @@ class Profile {
     List<String>? photoUrls,
     List<String>? interests,
     String? city,
+    String? country,
     double? distanceKm,
     bool? isOnline,
     bool? isVerified,
@@ -98,6 +106,7 @@ class Profile {
       photoUrls: photoUrls ?? this.photoUrls,
       interests: interests ?? this.interests,
       city: city ?? this.city,
+      country: country ?? this.country,
       distanceKm: distanceKm ?? this.distanceKm,
       isOnline: isOnline ?? this.isOnline,
       isVerified: isVerified ?? this.isVerified,

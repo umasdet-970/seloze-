@@ -63,13 +63,26 @@ class FirestoreNotificationRepository implements NotificationRepository {
   @override
   void add(String uid, NotificationType type, String title, String body) {
     _ensureListening(uid);
-    unawaited(_sub(uid).add({
-      'type': type.name,
-      'title': title,
-      'body': body,
-      'createdAt': FieldValue.serverTimestamp(),
-      'read': false,
-    }));
+    unawaited(_addAsync(uid, type, title, body));
+  }
+
+  // Swallows write failures — this fires on every like/match/message, so
+  // a transient failure without a handler is exactly the kind of thing
+  // that would otherwise surface as a stream of unhandled zone errors
+  // under any real-world flakiness. A try/catch around an explicit
+  // `await`, rather than `.catchError` on the bare Future, because
+  // `add()`'s return type (a DocumentReference) can't be produced from
+  // an error handler that just wants to ignore the failure.
+  Future<void> _addAsync(String uid, NotificationType type, String title, String body) async {
+    try {
+      await _sub(uid).add({
+        'type': type.name,
+        'title': title,
+        'body': body,
+        'createdAt': FieldValue.serverTimestamp(),
+        'read': false,
+      });
+    } catch (_) {}
   }
 
   @override

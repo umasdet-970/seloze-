@@ -127,28 +127,35 @@ class MatchesScreen extends ConsumerWidget {
     final uid = ref.read(currentUserIdProvider);
     final social = ref.read(socialRepositoryProvider);
 
-    switch (action) {
-      case 'unmatch':
-        final confirmed = await _confirm(context, 'Unmatch $targetName?', 'You can still match again later if you both like each other.');
-        if (confirmed == true) {
-          HapticFeedback.mediumImpact();
-          await social.unmatch(uid, targetId);
-        }
-        break;
-      case 'block':
-        final confirmed = await _confirm(context, 'Block $targetName?', 'They will disappear from your Discover and this match will be removed.');
-        if (confirmed == true) {
-          HapticFeedback.mediumImpact();
-          await social.block(uid, targetId);
-        }
-        break;
-      case 'report':
-        await showReportSheet(
-          context,
-          targetName: targetName,
-          onSubmit: (reason, details) => social.report(uid, targetId, reason: reason, details: details),
-        );
-        break;
+    try {
+      switch (action) {
+        case 'unmatch':
+          final confirmed = await _confirm(context, 'Unmatch $targetName?', 'You can still match again later if you both like each other.');
+          if (confirmed == true) {
+            HapticFeedback.mediumImpact();
+            await social.unmatch(uid, targetId);
+          }
+          break;
+        case 'block':
+          final confirmed = await _confirm(context, 'Block $targetName?', 'They will disappear from your Discover and this match will be removed.');
+          if (confirmed == true) {
+            HapticFeedback.mediumImpact();
+            await social.block(uid, targetId);
+          }
+          break;
+        case 'report':
+          // showReportSheet has its own try/catch around onSubmit.
+          await showReportSheet(
+            context,
+            targetName: targetName,
+            onSubmit: (reason, details) => social.report(uid, targetId, reason: reason, details: details),
+          );
+          break;
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
     }
   }
 

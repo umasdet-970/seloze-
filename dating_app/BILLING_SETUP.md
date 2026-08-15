@@ -55,7 +55,18 @@ test: purchasing each plan, `restorePurchases`, and `cancelAutoRenew`
 (which deep-links to Play Store's subscription management — Play Billing
 gives apps no API to cancel a subscription directly).
 
+## 6. (Optional) Webhooks for admin dashboard LTV
+
+`currentSubscription()` only ever sees the current entitlement on
+whatever device is open — real transaction *history* (needed for the
+admin dashboard's LTV figure) comes from RevenueCat's webhooks instead.
+A `revenueCatWebhook` Cloud Function is already written to receive
+these — see FIREBASE_SETUP.md's "CAC/LTV data plumbing" section for the
+3-step setup (deploy, set the shared secret, add the webhook URL in
+RevenueCat's dashboard). Optional in the sense that everything else
+here works without it; LTV just stays ₹0 until it's done.
+
 ## What this doesn't cover
 
-- **Server-side receipt validation / webhook handling** — RevenueCat does this for you and is the source of truth `currentSubscription()` reads from, so this is less of a gap than with a from-scratch Play Billing integration, but you should still set up RevenueCat's webhooks if the admin dashboard needs subscription events.
+- **Server-side receipt validation** — RevenueCat does this for you and is the source of truth `currentSubscription()` reads from, so this is less of a gap than with a from-scratch Play Billing integration.
 - **iOS** — this app's Android-only right now (matches the "Play Store launch" goal); the RevenueCat repository code itself is platform-agnostic, but Play Console/App Store product setup would need a matching App Store Connect pass.

@@ -8,15 +8,19 @@ import '../../admin/providers/admin_providers.dart';
 
 final _inr = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
 
-/// Funnel, retention, acquisition, CAC/LTV (spec section 17). Real
-/// numbers need events logged by the mobile app's AnalyticsRepository,
-/// piped through Firebase Analytics/BigQuery — this mock shows the
-/// intended shape with illustrative figures.
+/// Funnel, retention, acquisition, CAC/LTV (spec section 17). DAU/MAU,
+/// churn, premium/ad-free conversion, the registration funnel, and
+/// (Android) acquisition source are real Firestore queries once
+/// `kUseFirebase` is on. CAC/LTV are real computations too, but stay at
+/// ₹0 until, respectively, an admin enters ad-spend data and RevenueCat
+/// is configured to send webhooks — see FirestoreAdminRepository's doc
+/// comment. The mock still shows illustrative figures for all of it.
 class AnalyticsScreen extends ConsumerWidget {
   const AnalyticsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final stats = ref.watch(dashboardStatsProvider);
     final funnel = ref.watch(registrationFunnelProvider);
     final retention = ref.watch(retentionCurveProvider);
     final sources = ref.watch(acquisitionSourcesProvider);
@@ -29,17 +33,22 @@ class AnalyticsScreen extends ConsumerWidget {
         children: [
           const Text('Analytics', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
-          const Text('Funnel, retention, and acquisition — illustrative until real events flow in',
-              style: TextStyle(color: AppColors.textMuted)),
+          const Text(
+            'CAC needs ad-spend entered manually (or a future Ads API integration); LTV needs RevenueCat webhooks configured — both ₹0 until then, everything else here is live.',
+            style: TextStyle(color: AppColors.textMuted),
+          ),
           const SizedBox(height: 20),
           Wrap(
             spacing: 16,
             runSpacing: 16,
             children: [
+              _MetricTile(label: 'Daily active users', value: '${stats.dailyActiveUsers}'),
+              _MetricTile(label: 'Monthly active users', value: '${stats.monthlyActiveUsers}'),
               _MetricTile(label: 'Premium conversion', value: '${growth.premiumConversionPct}%'),
-              _MetricTile(label: 'Monthly churn', value: '${growth.monthlyChurnPct}%'),
-              _MetricTile(label: 'CAC (est.)', value: _inr.format(growth.cacInr)),
-              _MetricTile(label: 'LTV (est.)', value: _inr.format(growth.ltvInr), highlight: true),
+              _MetricTile(label: 'Ad-Free conversion', value: '${growth.adFreeConversionPct}%'),
+              _MetricTile(label: 'Monthly churn (est.)', value: '${growth.monthlyChurnPct}%'),
+              _MetricTile(label: 'CAC', value: _inr.format(growth.cacInr)),
+              _MetricTile(label: 'LTV', value: _inr.format(growth.ltvInr), highlight: true),
             ],
           ),
           const SizedBox(height: 24),
@@ -125,6 +134,12 @@ class _FunnelChart extends StatelessWidget {
   Widget build(BuildContext context) {
     if (steps.isEmpty) return const SizedBox.shrink();
     final maxUsers = steps.first.users;
+    // With real (not illustrative-mock) data, the first stage can
+    // genuinely be 0 on a freshly-deployed project with no signups yet —
+    // dividing by it would produce NaN/Infinity and break the progress
+    // bars, so every ratio falls back to 0 instead.
+    double ratio(int users) => maxUsers == 0 ? 0 : users / maxUsers;
+
     return Column(
       children: [
         for (final step in steps)
@@ -137,7 +152,7 @@ class _FunnelChart extends StatelessWidget {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(6),
                     child: LinearProgressIndicator(
-                      value: step.users / maxUsers,
+                      value: ratio(step.users),
                       minHeight: 20,
                       backgroundColor: Colors.grey.shade100,
                       color: AppColors.primary,
@@ -148,7 +163,7 @@ class _FunnelChart extends StatelessWidget {
                 SizedBox(
                   width: 90,
                   child: Text(
-                    '${step.users} (${(step.users / maxUsers * 100).round()}%)',
+                    '${step.users} (${(ratio(step.users) * 100).round()}%)',
                     style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
                     textAlign: TextAlign.right,
                   ),
@@ -211,6 +226,12 @@ class _AcquisitionChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (sources.isEmpty) {
+      return const Text(
+        'Not tracked yet — needs install-referrer capture at sign-up (Play/App Store attribution APIs), which isn\'t wired in.',
+        style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+      );
+    }
     final total = sources.fold<int>(0, (sum, s) => sum + s.users);
     return Column(
       children: [

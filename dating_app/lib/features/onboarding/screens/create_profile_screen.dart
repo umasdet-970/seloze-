@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -9,6 +10,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../data/models/dating_preferences.dart';
 import '../../../data/models/profile.dart';
 import '../../../data/repositories/firebase/firebase_storage_uploader.dart';
+import '../../../data/repositories/firebase/location_service.dart';
 import '../../analytics/providers/analytics_providers.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../discover/providers/discover_providers.dart';
@@ -42,6 +44,7 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
   final _professionController = TextEditingController();
   final _educationController = TextEditingController();
   final _cityController = TextEditingController();
+  final _countryController = TextEditingController();
   final _photoUrlController = TextEditingController();
 
   String? _gender;
@@ -84,6 +87,7 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
       _professionController.text = profile.profession;
       _educationController.text = profile.education;
       _cityController.text = profile.city;
+      _countryController.text = profile.country;
       _gender = profile.gender.isNotEmpty ? profile.gender : null;
       _interests.addAll(profile.interests);
       _photoUrls.addAll(profile.photoUrls);
@@ -112,6 +116,7 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
     _professionController.dispose();
     _educationController.dispose();
     _cityController.dispose();
+    _countryController.dispose();
     _photoUrlController.dispose();
     super.dispose();
   }
@@ -198,6 +203,7 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
         photoUrls: _photoUrls,
         interests: _interests.toList(),
         city: _cityController.text.trim(),
+        country: _countryController.text.trim(),
       );
       final preferences = DatingPreferences(
         intention: _intention,
@@ -215,6 +221,13 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
       ref
           .read(analyticsRepositoryProvider)
           .logEvent(_isEditing ? 'profile_edited' : 'profile_completed');
+
+      // Real geo-distance in Discover (spec section 4/15) — best-effort,
+      // deliberately not awaited: a slow GPS fix must never delay
+      // finishing onboarding, and LocationService already never throws
+      // (permission denied / location off / any failure just means no
+      // location gets saved, not an error surfaced here).
+      if (kUseFirebase) unawaited(LocationService().captureAndSaveLocation(uid));
       // Onboarding: router redirect takes it from here (-> /discover).
       // Editing: profile was already complete, so redirect won't fire —
       // just return to wherever Edit Profile was opened from.
@@ -514,13 +527,26 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
           Text('Location & preferences',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
-          TextField(
-            controller: _cityController,
-            decoration: const InputDecoration(
-              labelText: 'Location',
-              hintText: 'City, Country',
-              border: OutlineInputBorder(),
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _cityController,
+                  decoration: const InputDecoration(labelText: 'City', border: OutlineInputBorder()),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                // Kept as free text (not a picker) to support ~180 countries
+                // without bundling a country-list dependency; admin
+                // country-wise stats group on this value verbatim, so
+                // consistent spelling matters more at scale than it does here.
+                child: TextField(
+                  controller: _countryController,
+                  decoration: const InputDecoration(labelText: 'Country', border: OutlineInputBorder()),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 20),
           const Text('Dating intention', style: TextStyle(fontWeight: FontWeight.w600)),

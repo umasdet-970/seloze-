@@ -78,6 +78,11 @@ class MockSocialRepository implements SocialRepository {
   final Map<String, Set<String>> _shownToday = {};
   final Set<String> _seeded = {};
   final _reportLimiter = RateLimiter(maxEvents: 5, window: const Duration(minutes: 10));
+  // Bot detection (spec section 12/19): sustained swiping faster than a
+  // human plausibly can — real dating apps see this from scraping/farming
+  // bots. Throttles rather than silently allows; a real backend would
+  // also flag the account for the admin review queue, not just rate-limit.
+  final _swipeLimiter = RateLimiter(maxEvents: 40, window: const Duration(minutes: 2));
 
   void _notify() => _controller.add(null);
 
@@ -159,6 +164,9 @@ class MockSocialRepository implements SocialRepository {
 
   @override
   Future<LikeResult> like(String uid, String targetId) async {
+    if (!_swipeLimiter.allow(uid)) {
+      throw RateLimitException("You're swiping too fast — please slow down.");
+    }
     await Future.delayed(const Duration(milliseconds: 150));
     _ensureSeeded(uid);
     (_likesGiven[uid] ??= {}).add(targetId);
@@ -180,6 +188,9 @@ class MockSocialRepository implements SocialRepository {
 
   @override
   Future<void> pass(String uid, String targetId) async {
+    if (!_swipeLimiter.allow(uid)) {
+      throw RateLimitException("You're swiping too fast — please slow down.");
+    }
     await Future.delayed(const Duration(milliseconds: 100));
     (_passesGiven[uid] ??= {}).add(targetId);
     _notify();

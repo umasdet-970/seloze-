@@ -18,6 +18,11 @@ abstract class ChatRepository {
   bool isHidden(String conversationId, String forUid);
   bool isTyping(String conversationId, String byUserId);
 
+  /// Sets/clears [uid]'s typing state for [conversationId] — spec section
+  /// 7's typing indicator. Called from the composer's `onChanged`
+  /// (debounced) rather than per-keystroke; see ChatDetailScreen.
+  Future<void> setTyping(String conversationId, String uid, bool typing);
+
   Future<void> sendText(String conversationId, String senderId, String text);
   Future<void> sendImage(String conversationId, String senderId, String imageUrl);
   Future<void> markRead(String conversationId, String readerUid);
@@ -72,6 +77,13 @@ class MockChatRepository implements ChatRepository {
 
   @override
   bool isTyping(String conversationId, String byUserId) => _typingUsers[conversationId]?.contains(byUserId) ?? false;
+
+  @override
+  Future<void> setTyping(String conversationId, String uid, bool typing) async {
+    final set = _typingUsers[conversationId] ??= {};
+    typing ? set.add(uid) : set.remove(uid);
+    _notify();
+  }
 
   void _appendMessage(String conversationId, ChatMessage message) {
     (_messages[conversationId] ??= []).add(message);

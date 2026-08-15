@@ -25,3 +25,20 @@ const bool kUseFirebase = false;
 ///
 /// Independent of [kUseFirebase] — you can have one on without the other.
 const bool kUseRevenueCat = false;
+
+/// Real AI moderation (spec section 12/19) — calls the `moderateImage`/
+/// `moderateText` Cloud Functions (Cloud Vision SafeSearch / Cloud
+/// Natural Language) instead of the client-side rule-based checks.
+///
+/// Flip to `true` only after:
+/// 1. `kUseFirebase = true` and the Cloud Functions in `functions/`
+///    (including `moderateImage`/`moderateText`, see `functions/src/moderation.ts`)
+///    are deployed — this calls them, doesn't run them locally.
+/// 2. The Cloud Vision API and Cloud Natural Language API are enabled
+///    for this Firebase project in the GCP console (Blaze plan, same as
+///    Cloud Functions itself — no separate account).
+///
+/// Falls back to the same rule-based checks used when this is `false`
+/// if the Cloud Function call fails for any reason (not deployed yet,
+/// network error) — see `CloudModerationRepository`.
+const bool kUseCloudModeration = false;

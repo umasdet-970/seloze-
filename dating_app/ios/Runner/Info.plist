@@ -26,6 +26,20 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Connect uses your camera to take profile photos.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Connect uses your photo library so you can choose profile photos.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Connect saves photos you take to your photo library.</string>
+	<key>GADApplicationIdentifier</key>
+	<!-- Google's public TEST AdMob app ID (see lib/core/config/ad_config.dart).
+	     Replace with your real AdMob app ID before a real launch. -->
+	<string>ca-app-pub-3940256099942544~1458002511</string>
+	<key>NSUserTrackingUsageDescription</key>
+	<string>Connect uses this to show more relevant ads and measure ad performance.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Connect uses your approximate location to show how far away other members are and find matches near you.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

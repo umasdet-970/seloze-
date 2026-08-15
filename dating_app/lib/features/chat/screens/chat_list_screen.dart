@@ -183,21 +183,34 @@ class _ConversationTile extends ConsumerWidget {
     final uid = ref.read(currentUserIdProvider);
     final profile = conversation.profile;
 
-    switch (action) {
-      case 'hide':
-        await ref.read(chatRepositoryProvider).hideConversation(conversation.conversationId, uid);
-        break;
-      case 'block':
-        await ref.read(socialRepositoryProvider).block(uid, profile.id);
-        break;
-      case 'report':
-        await showReportSheet(
-          context,
-          targetName: profile.name,
-          onSubmit: (reason, details) =>
-              ref.read(socialRepositoryProvider).report(uid, profile.id, reason: reason, details: details),
-        );
-        break;
+    try {
+      switch (action) {
+        case 'hide':
+          await ref.read(chatRepositoryProvider).hideConversation(conversation.conversationId, uid);
+          break;
+        case 'block':
+          await ref.read(socialRepositoryProvider).block(uid, profile.id);
+          break;
+        case 'report':
+          // showReportSheet has its own try/catch around onSubmit — not
+          // duplicated here.
+          await showReportSheet(
+            context,
+            targetName: profile.name,
+            onSubmit: (reason, details) =>
+                ref.read(socialRepositoryProvider).report(uid, profile.id, reason: reason, details: details),
+          );
+          break;
+      }
+    } catch (e) {
+      // 'report' never reaches here — showReportSheet handles its own
+      // errors. 'hide'/'block' otherwise had no feedback path on
+      // failure (a PopupMenuButton's onSelected isn't awaited by
+      // Flutter, so a thrown error here would've been an unhandled
+      // zone error instead of this snackbar).
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
     }
   }
 }

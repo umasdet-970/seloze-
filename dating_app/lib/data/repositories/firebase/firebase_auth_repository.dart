@@ -6,6 +6,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../models/app_user.dart';
 import '../auth_repository.dart';
+import 'acquisition_source_service.dart';
 
 /// Real Firebase Auth + `users/{uid}` Firestore doc backing.
 ///
@@ -60,6 +61,7 @@ class FirebaseAuthRepository implements AuthRepository {
         displayName: (data?['name'] as String?) ?? user.displayName,
         ageVerified: data?['ageVerified'] as bool? ?? false,
         dateOfBirth: (data?['dateOfBirth'] as Timestamp?)?.toDate(),
+        accountStatus: data?['accountStatus'] as String? ?? 'active',
       );
       _controller.add(_cachedUser);
     });
@@ -69,9 +71,22 @@ class FirebaseAuthRepository implements AuthRepository {
     final ref = _firestore.collection('users').doc(user.uid);
     final snap = await ref.get();
     if (!snap.exists) {
+      // Only meaningful captured once, right at the true first sign-up —
+      // `_ensureUserDoc` already only reaches this branch that one time
+      // (guarded by `!snap.exists` above), which is exactly the right
+      // hook. Never throws — see AcquisitionSourceService's doc comment.
+      final acquisitionSource = await AcquisitionSourceService().captureSource();
+
       await ref.set({
         'createdAt': FieldValue.serverTimestamp(),
         'ageVerified': false,
+        'accountStatus': 'active',
+        'acquisitionSource': acquisitionSource,
+        // Mirrored from Firebase Auth (not read from there directly) so
+        // the admin dashboard — a plain Firestore client with no Admin
+        // SDK access to Auth records — has something to display/search.
+        if (user.email != null) 'email': user.email,
+        if (user.phoneNumber != null) 'phoneNumber': user.phoneNumber,
       }, SetOptions(merge: true));
     }
   }
@@ -84,6 +99,12 @@ class FirebaseAuthRepository implements AuthRepository {
       'invalid-email' => 'That email address looks invalid.',
       'too-many-requests' => 'Too many attempts. Please try again later.',
       'network-request-failed' => 'Network error. Check your connection and try again.',
+      // Firebase Auth requires a *recent* sign-in for sensitive
+      // operations (account deletion here) — a session signed in hours
+      // ago routinely hits this. Without this case, deleteAccount()
+      // would surface Firebase's raw English message instead of
+      // something actionable.
+      'requires-recent-login' => 'For your security, please sign out and sign back in before deleting your account.',
       _ => e.message ?? 'Something went wrong. Please try again.',
     };
     return AuthException(message);
@@ -208,10 +229,29 @@ class FirebaseAuthRepository implements AuthRepository {
     if (user == null) return;
     // Deleting the auth user only removes login credentials — the
     // Firestore doc (and subcollections: likes, matches, messages, etc.)
-    // must be cleaned up separately. A Cloud Function trigger on user
-    // deletion is the reliable way to do this server-side; deleting just
-    // the root doc here is a best-effort client-side fallback.
-    await _firestore.collection('users').doc(user.uid).delete();
-    await user.delete();
+    // must be cleaned up separately. `cleanupUserOnDelete` (see
+    // functions/) does this reliably server-side via the Admin SDK,
+    // which isn't subject to Firestore rules; this is a best-effort
+    // client-side attempt at just the root doc, run first because it
+    // has to — this uid's own auth context (required by firestore.rules)
+    // only exists until `user.delete()` below succeeds. If this fails,
+    // we still proceed to delete the Auth account rather than abort:
+    // that's the half that actually matters for "can this person still
+    // sign in and see my data", and the Cloud Function sweeps up
+    // anything left behind here regardless of whether this succeeded.
+    try {
+      await _firestore.collection('users').doc(user.uid).delete();
+    } catch (_) {}
+
+    try {
+      await user.delete();
+    } on fb.FirebaseAuthException catch (e) {
+      // Most common real-world case: 'requires-recent-login' — Firebase
+      // rejects sensitive operations like this on a session that isn't
+      // fresh. Mapped to an actionable AuthException instead of
+      // propagating Firebase's raw exception type, consistent with
+      // every other method in this repository.
+      throw _mapAuthError(e);
+    }
   }
 }

@@ -22,11 +22,25 @@ class PaywallScreen extends ConsumerStatefulWidget {
 
 class _PaywallScreenState extends ConsumerState<PaywallScreen> {
   SubscriptionPlan? _purchasing;
+  bool _restoring = false;
 
   Future<void> _purchase(SubscriptionPlan plan) async {
     setState(() => _purchasing = plan);
     final uid = ref.read(currentUserIdProvider);
-    await ref.read(billingRepositoryProvider).purchase(uid, plan);
+    try {
+      await ref.read(billingRepositoryProvider).purchase(uid, plan);
+    } catch (e) {
+      // Without this, a failed or user-cancelled purchase (both routine —
+      // RevenueCat/store checkout throws on cancel, not just real errors)
+      // would leave `_purchasing` set forever: the button's `onPressed`
+      // is gated on `!isPurchasing`, so this plan's buy button would be
+      // permanently stuck showing a spinner until the app restarts.
+      if (mounted) {
+        setState(() => _purchasing = null);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+      return;
+    }
     if (!mounted) return;
     setState(() => _purchasing = null);
     HapticFeedback.heavyImpact();
@@ -59,11 +73,39 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
 
   Future<void> _cancelAutoRenew() async {
     final uid = ref.read(currentUserIdProvider);
-    await ref.read(billingRepositoryProvider).cancelAutoRenew(uid);
+    try {
+      await ref.read(billingRepositoryProvider).cancelAutoRenew(uid);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      return;
+    }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Auto-renew turned off. Your plan stays active until it expires.')),
       );
+    }
+  }
+
+  // Apple's App Store Review Guidelines (3.1.1) require a restore
+  // mechanism for any app selling auto-renewable subscriptions — the
+  // repository method already existed (BillingRepository.restorePurchases,
+  // both Mock and RevenueCat implementations), it just had no UI calling
+  // it anywhere. Without this button, the app fails App Store review.
+  Future<void> _restore() async {
+    setState(() => _restoring = true);
+    final uid = ref.read(currentUserIdProvider);
+    try {
+      await ref.read(billingRepositoryProvider).restorePurchases(uid);
+      if (mounted) {
+        final record = ref.read(subscriptionRecordProvider);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(record.isActive ? 'Purchases restored.' : 'No previous purchases found.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    } finally {
+      if (mounted) setState(() => _restoring = false);
     }
   }
 
@@ -118,6 +160,14 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
                     onSubscribe: () => _purchase(plan),
                   ),
                 )),
+            Center(
+              child: TextButton(
+                onPressed: _restoring ? null : _restore,
+                child: _restoring
+                    ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('Restore purchases'),
+              ),
+            ),
           ],
         ),
       ),
@@ -136,7 +186,7 @@ class _CurrentPlanCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.08), borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(16)),
       child: Row(
         children: [
           const Icon(Icons.workspace_premium, color: AppColors.primary),

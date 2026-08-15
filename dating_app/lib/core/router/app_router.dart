@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/auth/providers/auth_providers.dart';
+import '../../features/auth/screens/account_suspended_screen.dart';
 import '../../features/auth/screens/age_verification_screen.dart';
 import '../../features/auth/screens/forgot_password_screen.dart';
 import '../../features/auth/screens/login_screen.dart';
@@ -28,6 +29,7 @@ import '../../shared/widgets/main_nav_shell.dart';
 import '../../data/models/profile.dart';
 import '../../features/legal/screens/legal_document_screen.dart';
 import '../constants/legal_content.dart';
+import 'navigation_key.dart';
 
 const _authRoutes = ['/login', '/signup', '/otp', '/forgot-password'];
 const _tabRoutes = ['/discover', '/likes', '/matches', '/chat', '/profile'];
@@ -45,6 +47,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   final userProfileRepository = ref.watch(userProfileRepositoryProvider);
 
   return GoRouter(
+    navigatorKey: rootNavigatorKey,
     initialLocation: '/login',
     refreshListenable: GoRouterRefreshStream([
       authRepository.authStateChanges(),
@@ -56,13 +59,18 @@ final routerProvider = Provider<GoRouter>((ref) {
       final onAuthRoute = _authRoutes.contains(state.matchedLocation);
       final onAgeGate = state.matchedLocation == '/age-verify';
       final onProfileGate = state.matchedLocation == '/create-profile';
+      final onSuspendedGate = state.matchedLocation == '/account-suspended';
 
       if (user == null) return onAuthRoute ? null : '/login';
+      // Checked before age/profile gates — a suspended/banned user
+      // shouldn't be routed through onboarding just because those
+      // steps happen not to be complete yet.
+      if (user.isSuspendedOrBanned) return onSuspendedGate ? null : '/account-suspended';
       if (!user.ageVerified) return onAgeGate ? null : '/age-verify';
       if (!userProfileRepository.hasCompletedProfile(user.uid)) {
         return onProfileGate ? null : '/create-profile';
       }
-      if (onAuthRoute || onAgeGate || onProfileGate) return '/discover';
+      if (onAuthRoute || onAgeGate || onProfileGate || onSuspendedGate) return '/discover';
       return null;
     },
     routes: [
@@ -71,6 +79,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/otp', builder: (context, state) => const OtpScreen()),
       GoRoute(path: '/forgot-password', builder: (context, state) => const ForgotPasswordScreen()),
       GoRoute(path: '/age-verify', builder: (context, state) => const AgeVerificationScreen()),
+      GoRoute(path: '/account-suspended', builder: (context, state) => const AccountSuspendedScreen()),
       GoRoute(path: '/create-profile', builder: (context, state) => const CreateProfileScreen()),
       GoRoute(path: '/edit-profile', builder: (context, state) => const CreateProfileScreen()),
       GoRoute(path: '/paywall', builder: (context, state) => const PaywallScreen()),

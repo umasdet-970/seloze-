@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../core/utils/profile_risk_scorer.dart';
 import '../../models/dating_preferences.dart';
 import '../../models/profile.dart';
 import '../user_profile_repository.dart';
@@ -93,8 +94,17 @@ class FirestoreUserProfileRepository implements UserProfileRepository {
     // `profileComplete` lets FirestoreProfileRepository's discover-feed
     // query filter server-side (`where('profileComplete', isEqualTo: true)`)
     // instead of fetching every user doc and filtering client-side.
+    //
+    // Suspicious-profile detection (spec section 3/12/19) runs here, once
+    // per save, rather than on every admin dashboard load — see
+    // ProfileRiskScorer's doc comment. Persisted, not just computed and
+    // discarded, so the admin flagged-profiles queue is a plain Firestore
+    // read instead of rescoring every user on every page load.
+    final risk = ProfileRiskScorer.assess(profile);
     final map = profile.toMap()
-      ..['profileComplete'] = profile.name.isNotEmpty && profile.photoUrls.isNotEmpty;
+      ..['profileComplete'] = profile.name.isNotEmpty && profile.photoUrls.isNotEmpty
+      ..['riskScore'] = risk.score
+      ..['riskSignals'] = risk.signals;
     await _userDoc(uid).set(map, SetOptions(merge: true));
   }
 

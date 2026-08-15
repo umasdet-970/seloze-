@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import '../models/admin_models.dart';
+import 'admin_auth_repository.dart';
 
 /// Everything an admin needs (spec section 16). This talks to a shared
 /// backend in production (Firestore + Cloud Functions aggregations) —
@@ -21,6 +22,11 @@ abstract class AdminRepository {
   Future<void> setUserStatus(String userId, AccountStatus status);
   Future<void> setVerified(String userId, bool verified);
 
+  /// Users whose automated risk score (spec section 3/12/19) crossed the
+  /// review threshold — the proactive counterpart to [reportQueue], which
+  /// only surfaces profiles someone has already reported.
+  List<AdminUser> flaggedProfiles();
+
   List<ReportQueueItem> reportQueue();
   Future<void> resolveReport(String reportId, ModerationAction action);
 
@@ -28,6 +34,11 @@ abstract class AdminRepository {
   List<RetentionPoint> retentionCurve();
   List<AcquisitionSource> acquisitionSources();
   GrowthMetrics growthMetrics();
+
+  /// Audit trail (spec section 20) — every setUserStatus/setVerified/
+  /// resolveReport call records an entry here automatically; there's no
+  /// separate "log this" call site for UI code to remember.
+  List<AuditLogEntry> auditLog();
 }
 
 class MockAdminRepository implements AdminRepository {
@@ -35,6 +46,26 @@ class MockAdminRepository implements AdminRepository {
   late final List<AdminUser> _users;
   late final List<ReportQueueItem> _reports;
   late final List<RevenuePoint> _revenueTrend;
+  final List<AuditLogEntry> _auditLog = [];
+  int _nextAuditId = 1;
+
+  // Only one admin identity exists in the mock (see MockAdminAuthRepository) —
+  // real deployments attribute each entry to whichever admin actually signed
+  // the action, read from FirebaseAuth in FirestoreAdminRepository.
+  void _recordAudit(String action, AdminUser target, {String details = ''}) {
+    _auditLog.insert(
+      0,
+      AuditLogEntry(
+        id: 'audit-${_nextAuditId++}',
+        adminEmail: MockAdminAuthRepository.demoEmail,
+        action: action,
+        targetUserId: target.id,
+        targetUserName: target.name,
+        details: details,
+        createdAt: DateTime.now(),
+      ),
+    );
+  }
 
   static const _countries = ['India', 'United States', 'United Kingdom', 'UAE', 'Canada', 'Australia', 'Germany', 'Singapore'];
   static const _firstNames = [
@@ -43,6 +74,13 @@ class MockAdminRepository implements AdminRepository {
   ];
   static const _lastNames = ['Sharma', 'Patel', 'Khan', 'Singh', 'Reddy', 'Smith', 'Johnson', 'Brown', 'Wilson', 'Taylor'];
   static const _reportReasons = ['Fake profile', 'Inappropriate photos', 'Harassment or abuse', 'Spam or scam', 'Underage user', 'Other'];
+  static const _riskSignalPool = [
+    'Only one photo',
+    'Empty bio',
+    'Bio contains a spam/off-platform link or keyword',
+    'Name looks auto-generated',
+    'Bio is all caps',
+  ];
 
   MockAdminRepository() {
     _seed();
@@ -67,6 +105,15 @@ class MockAdminRepository implements AdminRepository {
               : i % 11 == 0
                   ? AccountStatus.warned
                   : AccountStatus.active;
+      // Roughly 1 in 9 seeded users looks suspicious, with a couple of
+      // plausible signals — demonstrates the flagged-profiles queue
+      // without every demo user tripping it.
+      final flagged = i % 9 == 0;
+      final signals = flagged
+          ? (List.of(_riskSignalPool)..shuffle(random)).take(1 + random.nextInt(2)).toList()
+          : const <String>[];
+      final riskScore = flagged ? 25 + random.nextInt(50) : random.nextInt(15);
+
       return AdminUser(
         id: 'user-$i',
         name: '${_firstNames[i % _firstNames.length]} ${_lastNames[(i * 3) % _lastNames.length]}',
@@ -77,6 +124,8 @@ class MockAdminRepository implements AdminRepository {
         tier: tier,
         isVerified: random.nextBool(),
         reportCount: status == AccountStatus.active ? 0 : 1 + random.nextInt(4),
+        riskScore: riskScore,
+        riskSignals: signals,
       );
     });
 
@@ -111,6 +160,7 @@ class MockAdminRepository implements AdminRepository {
     return DashboardStats(
       totalUsers: _users.length,
       dailyActiveUsers: (_users.length * 0.42).round(),
+      monthlyActiveUsers: (_users.length * 0.71).round(),
       newRegistrationsToday: 7,
       freeUsers: free,
       premiumUsers: premium,
@@ -147,6 +197,7 @@ class MockAdminRepository implements AdminRepository {
     final index = _users.indexWhere((u) => u.id == userId);
     if (index != -1) {
       _users[index] = _users[index].copyWith(status: status);
+      _recordAudit('Set account status to ${status.label}', _users[index]);
       _notify();
     }
   }
@@ -157,8 +208,20 @@ class MockAdminRepository implements AdminRepository {
     final index = _users.indexWhere((u) => u.id == userId);
     if (index != -1) {
       _users[index] = _users[index].copyWith(isVerified: verified);
+      _recordAudit(verified ? 'Verified profile' : 'Removed verification', _users[index]);
       _notify();
     }
+  }
+
+  @override
+  List<AdminUser> flaggedProfiles() {
+    // Verifying a profile is treated as "an admin reviewed this and it's
+    // legitimate" — it both grants the verified badge and clears the
+    // flag, so this queue empties as it's worked rather than staying
+    // static. Suspending/banning removes it from Discover entirely,
+    // which has the same practical effect.
+    return _users.where((u) => u.riskScore >= 25 && !u.isVerified && u.status == AccountStatus.active).toList()
+      ..sort((a, b) => b.riskScore.compareTo(a.riskScore));
   }
 
   @override
@@ -180,9 +243,13 @@ class MockAdminRepository implements AdminRepository {
         ModerationAction.dismissed => _users[userIndex].status,
       };
       _users[userIndex] = _users[userIndex].copyWith(status: newStatus);
+      _recordAudit('Resolved report ($reportId): ${action.label}', _users[userIndex]);
     }
     _notify();
   }
+
+  @override
+  List<AuditLogEntry> auditLog() => List.unmodifiable(_auditLog);
 
   @override
   List<FunnelStep> registrationFunnel() {
@@ -226,6 +293,7 @@ class MockAdminRepository implements AdminRepository {
       ltvInr: 1840,
       monthlyChurnPct: 8.4,
       premiumConversionPct: 9.6,
+      adFreeConversionPct: 3.1,
     );
   }
 }

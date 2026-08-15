@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/analytics/screens/analytics_screen.dart';
+import '../../features/audit/screens/audit_log_screen.dart';
 import '../../features/auth/providers/admin_auth_providers.dart';
 import '../../features/auth/screens/admin_login_screen.dart';
 import '../../features/dashboard/screens/overview_screen.dart';
@@ -12,7 +13,7 @@ import '../../features/subscriptions/screens/subscriptions_screen.dart';
 import '../../features/users/screens/users_screen.dart';
 import '../../shared/widgets/admin_shell.dart';
 
-const _tabRoutes = ['/', '/users', '/moderation', '/subscriptions', '/analytics'];
+const _tabRoutes = ['/', '/users', '/moderation', '/subscriptions', '/analytics', '/audit-log'];
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authRepository = ref.watch(adminAuthRepositoryProvider);
@@ -40,6 +41,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/moderation', builder: (context, state) => const ModerationScreen()),
           GoRoute(path: '/subscriptions', builder: (context, state) => const SubscriptionsScreen()),
           GoRoute(path: '/analytics', builder: (context, state) => const AnalyticsScreen()),
+          GoRoute(path: '/audit-log', builder: (context, state) => const AuditLogScreen()),
         ],
       ),
     ],

@@ -46,6 +46,36 @@ dependencies:
   purchases_flutter: ^8.4.4
   url_launcher: ^6.3.1 # deep-links to Play Store's own subscription-management UI (see cancelAutoRenew)
 
+  # Ads for free-tier users (spec section 18). Uses Google's public TEST
+  # ad unit/app IDs (see lib/core/config/ad_config.dart) — unlike Firebase/
+  # RevenueCat above, these work with no AdMob account at all, so kUseAds
+  # defaults true rather than false.
+  google_mobile_ads: ^5.1.0
+
+  # Real-time push/text/photo moderation (spec section 12/19), calling
+  # Cloud Functions that wrap Cloud Vision / Cloud Natural Language.
+  # Gated behind kUseCloudModeration, same story as Firebase above.
+  cloud_functions: ^5.1.3
+
+  # Real geo-distance in Discover (spec section 4/15). Device location
+  # permission + position, used to compute real Haversine distance
+  # between users instead of the old distanceKm=0 placeholder. Works
+  # standalone, no account needed — the user just has to grant the
+  # permission (handled gracefully if denied, see LocationService).
+  geolocator: ^13.0.1
+
+  # Foreground push presentation (spec section 7/13). FirebaseMessaging's
+  # onMessage doesn't show anything on its own while the app is open —
+  # this shows an actual heads-up local notification for it.
+  flutter_local_notifications: ^18.0.1
+
+  # Acquisition source (spec section 17), Android only — queries the
+  # real Google Play Install Referrer API (a first-party Play Store
+  # capability, free, no AdMob/MMP account needed) once at first
+  # sign-up. See core/config docs and AcquisitionSourceService for what
+  # this can and can't capture on iOS.
+  android_play_install_referrer: ^0.4.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

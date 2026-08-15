@@ -31,7 +31,15 @@ class SettingsScreen extends ConsumerWidget {
             context,
             icon: Icons.logout,
             label: 'Log out',
-            onTap: () => ref.read(authRepositoryProvider).signOut(),
+            onTap: () async {
+              try {
+                await ref.read(authRepositoryProvider).signOut();
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+                }
+              }
+            },
           ),
           _tile(
             context,
@@ -73,9 +81,19 @@ class SettingsScreen extends ConsumerWidget {
           TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
           TextButton(
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(dialogContext);
-              ref.read(authRepositoryProvider).deleteAccount();
+              try {
+                await ref.read(authRepositoryProvider).deleteAccount();
+              } catch (e) {
+                // Most likely 'please sign out and back in' (Firebase
+                // requires a fresh session for account deletion) — the
+                // user needs to see this, not have it silently fail
+                // while the dialog just closes as if it worked.
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+                }
+              }
             },
             child: const Text('Delete'),
           ),

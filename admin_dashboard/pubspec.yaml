@@ -41,6 +41,14 @@ dependencies:
   google_fonts: ^6.2.1
   intl: ^0.19.0
 
+  # Firebase. Reads the SAME project/data as dating_app — see
+  # FIREBASE_SETUP.md. Gated behind kUseFirebase (core/config/backend_config.dart),
+  # same pattern as the mobile app: safe to fetch before `flutterfire configure`
+  # has run, since nothing calls Firebase.initializeApp() until that flag flips.
+  firebase_core: ^3.3.0
+  firebase_auth: ^5.1.4
+  cloud_firestore: ^5.2.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

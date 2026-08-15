@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/profile.dart';
 import '../../../data/models/subscription_models.dart';
+import '../../../shared/widgets/ad_banner.dart';
 import '../../../shared/widgets/report_sheet.dart';
 import '../../../shared/widgets/shimmer_placeholders.dart';
 import '../../notifications/providers/notification_providers.dart';
@@ -97,16 +98,25 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
 
   void _handleSwipe(CardSwiperDirection direction, Profile profile) async {
     final notifier = ref.read(discoverFeedProvider.notifier);
-    if (direction == CardSwiperDirection.right || direction == CardSwiperDirection.top) {
-      HapticFeedback.mediumImpact();
-      final matched = await notifier.likeTop();
-      if (matched && mounted) {
-        HapticFeedback.heavyImpact();
-        _showMatchDialog(profile.name);
+    try {
+      if (direction == CardSwiperDirection.right || direction == CardSwiperDirection.top) {
+        HapticFeedback.mediumImpact();
+        final matched = await notifier.likeTop();
+        if (matched && mounted) {
+          HapticFeedback.heavyImpact();
+          _showMatchDialog(profile.name);
+        }
+      } else if (direction == CardSwiperDirection.left) {
+        HapticFeedback.lightImpact();
+        await notifier.passTop();
       }
-    } else if (direction == CardSwiperDirection.left) {
-      HapticFeedback.lightImpact();
-      await notifier.passTop();
+    } catch (e) {
+      // Surfaces the swipe-rate limiter's message (bot-detection guard —
+      // spec section 12/19) instead of letting it fall through as an
+      // uncaught async error.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
     }
   }
 
@@ -137,10 +147,16 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
               title: Text('Block $targetName'),
               onTap: () async {
                 Navigator.pop(sheetContext);
-                await ref.read(socialRepositoryProvider).block(ref.read(currentUserIdProvider), targetId);
-                await ref.read(discoverFeedProvider.notifier).refresh();
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$targetName is blocked.')));
+                try {
+                  await ref.read(socialRepositoryProvider).block(ref.read(currentUserIdProvider), targetId);
+                  await ref.read(discoverFeedProvider.notifier).refresh();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$targetName is blocked.')));
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+                  }
                 }
               },
             ),
@@ -193,7 +209,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
                   : tier == SubscriptionTier.adFree
                       ? 'Ad-Free'
                       : 'Free'),
-              backgroundColor: tier == SubscriptionTier.premium ? AppColors.primary.withOpacity(0.15) : null,
+              backgroundColor: tier == SubscriptionTier.premium ? AppColors.primary.withValues(alpha: 0.15) : null,
               labelStyle: TextStyle(
                 fontSize: 11,
                 color: tier == SubscriptionTier.premium ? AppColors.primary : onSurfaceVariant,
@@ -271,34 +287,25 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
 }
 
 /// Stand-in for a real ad SDK (e.g. AdMob) — spec sections 4/18: ads
-/// display for Free users only. Swap the Container for the SDK's banner
-/// widget when one is integrated.
+/// display for Free users only — real ad SDK (see AdBanner/ad_config.dart),
+/// not a placeholder. "Remove ads" stays visible regardless of whether an
+/// ad actually loaded, since that CTA shouldn't depend on ad-network luck.
 class _AdPlaceholder extends StatelessWidget {
   final VoidCallback onUpgrade;
   const _AdPlaceholder({required this.onUpgrade});
 
   @override
   Widget build(BuildContext context) {
-    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade300),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.campaign_outlined, size: 18, color: onSurfaceVariant),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text('Advertisement', style: TextStyle(color: onSurfaceVariant, fontSize: 12)),
-            ),
-            TextButton(onPressed: onUpgrade, child: const Text('Remove ads', style: TextStyle(fontSize: 12))),
-          ],
-        ),
+      child: Column(
+        children: [
+          const AdBanner(),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(onPressed: onUpgrade, child: const Text('Remove ads', style: TextStyle(fontSize: 12))),
+          ),
+        ],
       ),
     );
   }

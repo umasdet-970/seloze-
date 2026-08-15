@@ -9,6 +9,13 @@ class AppUser {
   final bool ageVerified;
   final DateTime? dateOfBirth;
 
+  /// One of 'active' | 'warned' | 'suspended' | 'banned' — mirrors the
+  /// admin dashboard's `AccountStatus` enum by name (kept as a plain
+  /// String here rather than a shared enum since the two Flutter apps
+  /// don't share a package). Written only by admin moderation actions;
+  /// the router redirects suspended/banned users to `/account-suspended`.
+  final String accountStatus;
+
   const AppUser({
     required this.uid,
     this.email,
@@ -16,7 +23,10 @@ class AppUser {
     this.displayName,
     this.ageVerified = false,
     this.dateOfBirth,
+    this.accountStatus = 'active',
   });
+
+  bool get isSuspendedOrBanned => accountStatus == 'suspended' || accountStatus == 'banned';
 
   AppUser copyWith({
     String? email,
@@ -24,6 +34,7 @@ class AppUser {
     String? displayName,
     bool? ageVerified,
     DateTime? dateOfBirth,
+    String? accountStatus,
   }) {
     return AppUser(
       uid: uid,
@@ -32,6 +43,7 @@ class AppUser {
       displayName: displayName ?? this.displayName,
       ageVerified: ageVerified ?? this.ageVerified,
       dateOfBirth: dateOfBirth ?? this.dateOfBirth,
+      accountStatus: accountStatus ?? this.accountStatus,
     );
   }
 }

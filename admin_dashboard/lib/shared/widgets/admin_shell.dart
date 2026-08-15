@@ -12,13 +12,14 @@ class AdminShell extends ConsumerWidget {
 
   const AdminShell({super.key, required this.child, required this.currentIndex});
 
-  static const _routes = ['/', '/users', '/moderation', '/subscriptions', '/analytics'];
+  static const _routes = ['/', '/users', '/moderation', '/subscriptions', '/analytics', '/audit-log'];
   static const _items = [
     (Icons.dashboard_outlined, Icons.dashboard, 'Overview'),
     (Icons.people_outline, Icons.people, 'Users'),
     (Icons.flag_outlined, Icons.flag, 'Reports & Moderation'),
     (Icons.workspace_premium_outlined, Icons.workspace_premium, 'Subscriptions'),
     (Icons.insights_outlined, Icons.insights, 'Analytics'),
+    (Icons.history_outlined, Icons.history, 'Audit Log'),
   ];
 
   @override

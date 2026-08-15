@@ -10,12 +10,9 @@ import '../chat_repository.dart';
 ///   conversations/{conversationId}                    {participants: [a,b], hiddenFor: [uids]}
 ///   conversations/{conversationId}/messages/{msgId}    {senderId, text, imageUrl, sentAt, read}
 ///
-/// `isTyping` reads a `typingUsers` array off the conversation doc, but
-/// nothing writes to it — [ChatRepository] has no "set typing" method, so
-/// there's no real typing-indicator input yet. Kept wired to real data
-/// rather than hardcoded `false` so adding a writer later (e.g. a
-/// debounced `onChanged` call from the composer) is a pure addition, not
-/// a rework.
+/// `typingUsers` on the conversation doc is written by [setTyping] —
+/// called from the composer's debounced `onChanged` (see
+/// ChatDetailScreen) — and read by `isTyping`.
 class FirestoreChatRepository implements ChatRepository {
   FirestoreChatRepository({FirebaseFirestore? firestore}) : _firestore = firestore ?? FirebaseFirestore.instance;
 
@@ -90,6 +87,32 @@ class FirestoreChatRepository implements ChatRepository {
   bool isTyping(String conversationId, String byUserId) {
     _ensureListening(conversationId);
     return _typingCache[conversationId]?.contains(byUserId) ?? false;
+  }
+
+  @override
+  Future<void> setTyping(String conversationId, String uid, bool typing) async {
+    // `set(..., merge: true)` rather than `update` — the conversation doc
+    // may not exist yet if the user starts typing before either side has
+    // sent a first message. In that case this WRITES it, and
+    // firestore.rules' `allow create` requires `participants` to be
+    // present on that first write (it checks `request.auth.uid in
+    // request.resource.data.participants`) — so `participants` has to be
+    // included here too, not just in `_ensureConversationDoc`, or a
+    // brand-new conversation's first typing event is denied.
+    //
+    // Every call site in ChatDetailScreen calls this fire-and-forget
+    // (from onChanged/dispose/a Timer callback, none of which usefully
+    // await it) — swallowing errors here, once, is simpler and more
+    // reliable than adding catchError at each of those call sites.
+    try {
+      await _firestore.collection('conversations').doc(conversationId).set({
+        'participants': conversationId.split('_'),
+        'typingUsers': typing ? FieldValue.arrayUnion([uid]) : FieldValue.arrayRemove([uid]),
+      }, SetOptions(merge: true));
+    } catch (_) {
+      // Best-effort UI nicety — never worth surfacing to the user or
+      // crashing a dispose()/timer callback over.
+    }
   }
 
   Future<void> _ensureConversationDoc(String conversationId, String senderId) async {

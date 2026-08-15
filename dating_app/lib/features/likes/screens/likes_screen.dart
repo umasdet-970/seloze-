@@ -73,7 +73,7 @@ class LikesScreen extends ConsumerWidget {
                       Positioned.fill(
                         child: Container(
                           alignment: Alignment.center,
-                          color: Colors.black.withOpacity(0.15),
+                          color: Colors.black.withValues(alpha: 0.15),
                           child: Card(
                             margin: const EdgeInsets.symmetric(horizontal: 32),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -196,7 +196,7 @@ class _LikeTileState extends ConsumerState<_LikeTile> {
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [Colors.transparent, Colors.black.withOpacity(0.85)],
+                  colors: [Colors.transparent, Colors.black.withValues(alpha: 0.85)],
                 ),
               ),
               child: Column(

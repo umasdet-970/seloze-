@@ -72,14 +72,20 @@ class _ReportSheetContentState extends State<_ReportSheetContent> {
           const SizedBox(height: 4),
           const Text('Why are you reporting this profile?', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
           const SizedBox(height: 12),
-          ...ReportReason.values.map(
-            (r) => RadioListTile<ReportReason>(
-              contentPadding: EdgeInsets.zero,
-              dense: true,
-              title: Text(r.label),
-              value: r,
-              groupValue: _reason,
-              onChanged: (v) => setState(() => _reason = v),
+          RadioGroup<ReportReason>(
+            groupValue: _reason,
+            onChanged: (v) => setState(() => _reason = v),
+            child: Column(
+              children: ReportReason.values
+                  .map(
+                    (r) => RadioListTile<ReportReason>(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      title: Text(r.label),
+                      value: r,
+                    ),
+                  )
+                  .toList(),
             ),
           ),
           const SizedBox(height: 8),

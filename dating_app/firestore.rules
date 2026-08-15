@@ -22,11 +22,29 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
+    // Admin dashboard access, gated by an `admin` custom claim on the
+    // signed-in Firebase Auth token. Rules can only CHECK a claim, not
+    // grant one — see admin_dashboard/FIREBASE_SETUP.md for the one-time
+    // Admin SDK script that sets it on a specific admin's account.
+    //
+    // Known simplification: `isAdmin()` grants that account broad write
+    // access to any `users/{uid}` doc (needed for moderation actions like
+    // setUserStatus/setVerified), not just the accountStatus/isVerified
+    // fields it's actually meant to touch. A production hardening pass
+    // would use `request.resource.data.diff(resource.data).affectedKeys()`
+    // to restrict admin writes to exactly those fields. Documented here
+    // rather than silently shipped as if it were already fully scoped —
+    // same spirit as the matches/likesReceived simplification below.
+    function isAdmin() {
+      return signedIn() && request.auth.token.admin == true;
+    }
+
     match /users/{uid} {
       // Profile fields are readable by any signed-in user (Discover needs
-      // to read other users' cards); only the owner can write their own.
+      // to read other users' cards); only the owner (or an admin, for
+      // moderation actions) can write.
       allow read: if signedIn();
-      allow write: if isOwner(uid);
+      allow write: if isOwner(uid) || isAdmin();
 
       match /private/{docId} {
         // Preferences, settings, and the daily discovery quota are never
@@ -96,12 +114,59 @@ service cloud.firestore {
     }
 
     match /reports/{id} {
-      // Top-level collection for the admin dashboard — write-only from
-      // clients (filing a report), never readable by clients. Admin
-      // tooling reads this via the Admin SDK / a service account, which
-      // bypasses these rules entirely.
+      // Top-level collection for the admin dashboard. Clients can only
+      // file a report (create); reading/resolving the queue needs the
+      // `admin` custom claim. Never deletable — resolved reports stay as
+      // a moderation audit trail.
       allow create: if signedIn() && request.resource.data.reporterId == request.auth.uid;
-      allow read, update, delete: if false;
+      allow read, update: if isAdmin();
+      allow delete: if false;
+    }
+
+    match /analyticsFunnel/{uid} {
+      // Per-user funnel milestones (spec section 17) — written by the
+      // owner as they hit each stage, read by admin for funnel counts.
+      allow write: if isOwner(uid);
+      allow read: if isOwner(uid) || isAdmin();
+    }
+
+    match /auditLogs/{id} {
+      // Written automatically by AdminRepository on every moderation
+      // action (spec section 20) — create-only, never editable/deletable,
+      // including by another admin, so it stays a trustworthy record.
+      allow read, create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    match /revenueCatEvents/{id} {
+      // LTV data plumbing (spec section 17) — written exclusively by the
+      // revenueCatWebhook Cloud Function via the Admin SDK, which
+      // bypasses these rules entirely, so there's no `create` case for
+      // any client here (not even admin) to match — a client writing
+      // directly would let anyone report fake revenue for themselves.
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /adSpend/{id} {
+      // CAC data plumbing (spec section 17). No automated writer exists
+      // yet (would need a Meta/Google Ads API integration) — admins can
+      // enter spend manually (Firestore console, or a future admin
+      // dashboard form) until then, which is why this allows admin
+      // writes, unlike revenueCatEvents above.
+      allow read, write: if isAdmin();
+    }
+
+    // Collection-group rules for the admin dashboard's aggregate stats
+    // (total matches, total messages). A `count()` query needs the
+    // matching collection-group rule below in addition to (not instead
+    // of) the path-specific rules above — Firestore ORs across every
+    // rule block that matches, so this doesn't loosen non-admin access.
+    match /{path=**}/matches/{matchId} {
+      allow read: if isAdmin();
+    }
+    match /{path=**}/messages/{messageId} {
+      allow read: if isAdmin();
     }
   }
 }

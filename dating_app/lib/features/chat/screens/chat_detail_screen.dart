@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -34,6 +36,8 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
   final _textController = TextEditingController();
   final _scrollController = ScrollController();
   Profile? _resolvedProfile;
+  Timer? _typingStopTimer;
+  bool _isTypingSent = false;
 
   @override
   void initState() {
@@ -62,9 +66,40 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
     if (ref.read(openConversationIdProvider) == widget.conversationId) {
       ref.read(openConversationIdProvider.notifier).state = null;
     }
+    _typingStopTimer?.cancel();
+    if (_isTypingSent) {
+      // Best-effort, fire-and-forget — a widget mid-dispose can't await.
+      ref.read(chatRepositoryProvider).setTyping(widget.conversationId, ref.read(currentUserIdProvider), false);
+    }
     _textController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  /// Debounced typing indicator (spec section 7): marks typing=true on the
+  /// first keystroke after being idle, and typing=false either
+  /// immediately when the field is cleared or after 3s of no further
+  /// input — not on every keystroke, which would spam writes.
+  void _onComposerChanged(String text) {
+    _typingStopTimer?.cancel();
+    final uid = ref.read(currentUserIdProvider);
+
+    if (text.trim().isEmpty) {
+      if (_isTypingSent) {
+        _isTypingSent = false;
+        ref.read(chatRepositoryProvider).setTyping(widget.conversationId, uid, false);
+      }
+      return;
+    }
+
+    if (!_isTypingSent) {
+      _isTypingSent = true;
+      ref.read(chatRepositoryProvider).setTyping(widget.conversationId, uid, true);
+    }
+    _typingStopTimer = Timer(const Duration(seconds: 3), () {
+      _isTypingSent = false;
+      ref.read(chatRepositoryProvider).setTyping(widget.conversationId, uid, false);
+    });
   }
 
   void _scrollToBottom() {
@@ -92,7 +127,12 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
     }
 
     _textController.clear();
+    _typingStopTimer?.cancel();
     final uid = ref.read(currentUserIdProvider);
+    if (_isTypingSent) {
+      _isTypingSent = false;
+      unawaited(ref.read(chatRepositoryProvider).setTyping(widget.conversationId, uid, false));
+    }
     try {
       await ref.read(chatRepositoryProvider).sendText(widget.conversationId, uid, text);
       HapticFeedback.lightImpact();
@@ -246,7 +286,12 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                     style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
               ),
             ),
-          _Composer(controller: _textController, onSend: _sendText, onPickImage: _pickImage),
+          _Composer(
+            controller: _textController,
+            onSend: _sendText,
+            onPickImage: _pickImage,
+            onChanged: _onComposerChanged,
+          ),
         ],
       ),
     );
@@ -255,9 +300,14 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
   void _handleMenu(String action, Profile profile) async {
     final uid = ref.read(currentUserIdProvider);
     if (action == 'block') {
-      await ref.read(socialRepositoryProvider).block(uid, profile.id);
-      if (mounted) Navigator.of(context).pop();
+      try {
+        await ref.read(socialRepositoryProvider).block(uid, profile.id);
+        if (mounted) Navigator.of(context).pop();
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
     } else if (action == 'report') {
+      // showReportSheet has its own try/catch around onSubmit.
       await showReportSheet(
         context,
         targetName: profile.name,
@@ -329,8 +379,9 @@ class _Composer extends StatelessWidget {
   final TextEditingController controller;
   final VoidCallback onSend;
   final VoidCallback onPickImage;
+  final ValueChanged<String> onChanged;
 
-  const _Composer({required this.controller, required this.onSend, required this.onPickImage});
+  const _Composer({required this.controller, required this.onSend, required this.onPickImage, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
@@ -344,6 +395,7 @@ class _Composer extends StatelessWidget {
               child: TextField(
                 controller: controller,
                 textInputAction: TextInputAction.send,
+                onChanged: onChanged,
                 onSubmitted: (_) => onSend(),
                 decoration: InputDecoration(
                   hintText: 'Message…',

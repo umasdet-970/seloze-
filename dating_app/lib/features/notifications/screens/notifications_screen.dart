@@ -18,7 +18,15 @@ class NotificationsScreen extends ConsumerWidget {
         title: const Text('Notifications'),
         actions: [
           TextButton(
-            onPressed: () => ref.read(notificationRepositoryProvider).markAllRead(ref.read(currentUserIdProvider)),
+            onPressed: () async {
+              try {
+                await ref.read(notificationRepositoryProvider).markAllRead(ref.read(currentUserIdProvider));
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+                }
+              }
+            },
             child: const Text('Mark all read'),
           ),
         ],
@@ -31,18 +39,23 @@ class NotificationsScreen extends ConsumerWidget {
               itemBuilder: (context, index) {
                 final n = notifications[index];
                 return ListTile(
-                  tileColor: n.read ? null : AppColors.primary.withOpacity(0.05),
+                  tileColor: n.read ? null : AppColors.primary.withValues(alpha: 0.05),
                   leading: CircleAvatar(
-                    backgroundColor: AppColors.primary.withOpacity(0.12),
+                    backgroundColor: AppColors.primary.withValues(alpha: 0.12),
                     child: Icon(n.type.icon, color: AppColors.primary, size: 20),
                   ),
                   title: Text(n.title, style: TextStyle(fontWeight: n.read ? FontWeight.normal : FontWeight.bold)),
                   subtitle: Text(n.body, style: const TextStyle(fontSize: 12)),
                   trailing: Text(_relativeTime(n.createdAt), style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
-                  onTap: () {
-                    ref.read(notificationRepositoryProvider).markRead(ref.read(currentUserIdProvider), n.id);
+                  onTap: () async {
+                    try {
+                      await ref.read(notificationRepositoryProvider).markRead(ref.read(currentUserIdProvider), n.id);
+                    } catch (_) {
+                      // Non-critical — still navigate even if marking
+                      // read failed, rather than leaving the tap dead.
+                    }
                     final route = n.type.route;
-                    if (route != null) context.push(route);
+                    if (route != null && context.mounted) context.push(route);
                   },
                 );
               },
