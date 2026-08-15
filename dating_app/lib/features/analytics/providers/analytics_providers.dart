@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/config/backend_config.dart';
 import '../../../data/repositories/analytics_repository.dart';
+import '../../../data/repositories/firebase/firebase_analytics_repository.dart';
 
-/// Swap ConsoleAnalyticsRepository() -> FirebaseAnalyticsRepository()
-/// once Firebase is wired in.
-final analyticsRepositoryProvider = Provider<AnalyticsRepository>((ref) => ConsoleAnalyticsRepository());
+final analyticsRepositoryProvider = Provider<AnalyticsRepository>((ref) {
+  return kUseFirebase ? FirebaseAnalyticsRepository() : ConsoleAnalyticsRepository();
+});

@@ -1,10 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/config/backend_config.dart';
 import '../../../data/models/app_user.dart';
 import '../../../data/repositories/auth_repository.dart';
+import '../../../data/repositories/firebase/firebase_auth_repository.dart';
 
-/// Swap MockAuthRepository() -> FirebaseAuthRepository() once a real
-/// Firebase project exists. Nothing else in the app needs to change.
-final authRepositoryProvider = Provider<AuthRepository>((ref) => MockAuthRepository());
+final authRepositoryProvider = Provider<AuthRepository>((ref) {
+  return kUseFirebase ? FirebaseAuthRepository() : MockAuthRepository();
+});
 
 /// Reactive stream of the signed-in user, driving both the router redirect
 /// and any screen that needs to know who's logged in.

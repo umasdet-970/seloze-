@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
@@ -37,7 +38,7 @@ class ProfileScreen extends ConsumerWidget {
                     const SizedBox(height: 4),
                     Text(
                       user?.email ?? user?.phoneNumber ?? 'Signed in',
-                      style: const TextStyle(color: AppColors.textMuted),
+                      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
                     ),
                   ],
                 ),
@@ -110,7 +111,7 @@ class _ProfileSummaryCard extends StatelessWidget {
                   ],
                 ),
                 if (profile.city.isNotEmpty)
-                  Text(profile.city, style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                  Text(profile.city, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
               ],
             ),
           ),
@@ -135,6 +136,7 @@ class _VerificationCardState extends ConsumerState<_VerificationCard> {
     setState(() => _requesting = true);
     final uid = ref.read(currentUserIdProvider);
     await ref.read(userProfileRepositoryProvider).requestVerification(uid);
+    HapticFeedback.mediumImpact();
     ref.read(notificationRepositoryProvider).add(
           uid,
           NotificationType.profileVerification,
@@ -146,6 +148,7 @@ class _VerificationCardState extends ConsumerState<_VerificationCard> {
 
   @override
   Widget build(BuildContext context) {
+    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -157,7 +160,7 @@ class _VerificationCardState extends ConsumerState<_VerificationCard> {
         children: [
           Icon(
             widget.isVerified ? Icons.verified : Icons.shield_outlined,
-            color: widget.isVerified ? AppColors.success : AppColors.textMuted,
+            color: widget.isVerified ? AppColors.success : onSurfaceVariant,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -172,7 +175,7 @@ class _VerificationCardState extends ConsumerState<_VerificationCard> {
                   widget.isVerified
                       ? 'Your verified badge is visible to other members.'
                       : 'Verify your photos to get a badge and build trust.',
-                  style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                  style: TextStyle(color: onSurfaceVariant, fontSize: 12),
                 ),
               ],
             ),
@@ -195,6 +198,7 @@ class _SubscriptionCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final record = ref.watch(subscriptionRecordProvider);
     final tier = record.tier;
+    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -207,7 +211,7 @@ class _SubscriptionCard extends ConsumerWidget {
         children: [
           Icon(
             tier == SubscriptionTier.premium ? Icons.workspace_premium : Icons.card_membership_outlined,
-            color: tier == SubscriptionTier.premium ? AppColors.primary : AppColors.textMuted,
+            color: tier == SubscriptionTier.premium ? AppColors.primary : onSurfaceVariant,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -222,7 +226,7 @@ class _SubscriptionCard extends ConsumerWidget {
                   record.isActive
                       ? (record.autoRenew ? 'Renews automatically' : 'Auto-renew off')
                       : '10 discoveries/day, chat locked, ads shown',
-                  style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                  style: TextStyle(color: onSurfaceVariant, fontSize: 12),
                 ),
               ],
             ),

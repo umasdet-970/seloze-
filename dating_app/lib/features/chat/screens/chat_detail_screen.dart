@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
@@ -38,7 +39,10 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
   void initState() {
     super.initState();
     _resolvedProfile = widget.profile;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _init());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _init();
+      ref.read(openConversationIdProvider.notifier).state = widget.conversationId;
+    });
   }
 
   Future<void> _init() async {
@@ -55,6 +59,9 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
 
   @override
   void dispose() {
+    if (ref.read(openConversationIdProvider) == widget.conversationId) {
+      ref.read(openConversationIdProvider.notifier).state = null;
+    }
     _textController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -88,6 +95,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
     final uid = ref.read(currentUserIdProvider);
     try {
       await ref.read(chatRepositoryProvider).sendText(widget.conversationId, uid, text);
+      HapticFeedback.lightImpact();
       ref.read(analyticsRepositoryProvider).logEvent('message_sent', params: {'type': 'text'});
       _scrollToBottom();
     } catch (e) {
@@ -121,6 +129,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
     final uid = ref.read(currentUserIdProvider);
     try {
       await ref.read(chatRepositoryProvider).sendImage(widget.conversationId, uid, url);
+      HapticFeedback.lightImpact();
       ref.read(analyticsRepositoryProvider).logEvent('message_sent', params: {'type': 'image'});
       _scrollToBottom();
     } catch (e) {
@@ -190,7 +199,10 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                   Text(profile.name, style: const TextStyle(fontSize: 15)),
                   Text(
                     typing ? 'typing…' : (profile.isOnline ? 'Online' : 'Offline'),
-                    style: TextStyle(fontSize: 11, color: typing ? AppColors.primary : AppColors.textMuted),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: typing ? AppColors.primary : Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
@@ -211,7 +223,8 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
         children: [
           Expanded(
             child: messages.isEmpty
-                ? const Center(child: Text('Say hi 👋', style: TextStyle(color: AppColors.textMuted)))
+                ? Center(
+                    child: Text('Say hi 👋', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)))
                 : ListView.builder(
                     controller: _scrollController,
                     padding: const EdgeInsets.all(16),
@@ -225,9 +238,13 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                   ),
           ),
           if (typing)
-            const Padding(
-              padding: EdgeInsets.only(left: 16, bottom: 4),
-              child: Align(alignment: Alignment.centerLeft, child: Text('typing…', style: TextStyle(color: AppColors.textMuted, fontSize: 12))),
+            Padding(
+              padding: const EdgeInsets.only(left: 16, bottom: 4),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('typing…',
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
+              ),
             ),
           _Composer(controller: _textController, onSend: _sendText, onPickImage: _pickImage),
         ],
@@ -260,8 +277,9 @@ class _MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bubbleColor = isMe ? AppColors.primary : Colors.grey.shade200;
-    final textColor = isMe ? Colors.white : AppColors.textDark;
+    final colorScheme = Theme.of(context).colorScheme;
+    final bubbleColor = isMe ? AppColors.primary : colorScheme.surfaceContainerHighest;
+    final textColor = isMe ? Colors.white : colorScheme.onSurface;
 
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
@@ -285,10 +303,11 @@ class _MessageBubble extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(_formatTime(message.sentAt), style: const TextStyle(color: AppColors.textMuted, fontSize: 10)),
+                Text(_formatTime(message.sentAt), style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 10)),
                 if (showReadReceipt) ...[
                   const SizedBox(width: 4),
-                  Icon(message.read ? Icons.done_all : Icons.done, size: 12, color: message.read ? AppColors.primary : AppColors.textMuted),
+                  Icon(message.read ? Icons.done_all : Icons.done,
+                      size: 12, color: message.read ? AppColors.primary : colorScheme.onSurfaceVariant),
                 ],
               ],
             ),
@@ -329,7 +348,7 @@ class _Composer extends StatelessWidget {
                 decoration: InputDecoration(
                   hintText: 'Message…',
                   filled: true,
-                  fillColor: Colors.grey.shade100,
+                  fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
                 ),

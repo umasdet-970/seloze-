@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/notification_item.dart';
@@ -28,6 +29,7 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
     await ref.read(billingRepositoryProvider).purchase(uid, plan);
     if (!mounted) return;
     setState(() => _purchasing = null);
+    HapticFeedback.heavyImpact();
 
     final record = ref.read(subscriptionRecordProvider);
     ref.read(notificationRepositoryProvider).add(

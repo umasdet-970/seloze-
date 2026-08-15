@@ -1,0 +1,15 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "blocked",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [{ "fieldPath": "targetId", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "profileComplete", "order": "ASCENDING" }]
+    }
+  ],
+  "fieldOverrides": []
+}

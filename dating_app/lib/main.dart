@@ -1,15 +1,25 @@
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'core/config/backend_config.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
-
-// When Firebase is wired in:
-// import 'package:firebase_core/firebase_core.dart';
-// import 'firebase_options.dart';
+import 'data/repositories/firebase/push_notification_service.dart';
+import 'data/repositories/firebase/revenuecat_billing_repository.dart';
+import 'features/chat/providers/chat_providers.dart';
+import 'features/notifications/providers/notification_providers.dart';
+import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  if (kUseFirebase) {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  }
+  if (kUseRevenueCat) {
+    await configureRevenueCat();
+  }
   runApp(const ProviderScope(child: ConnectApp()));
 }
 
@@ -19,6 +29,8 @@ class ConnectApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
+    ref.watch(newMessageWatcherProvider); // keeps the global "New Message" listener alive app-wide
+    ref.watch(pushRegistrarProvider); // registers this device's FCM token once signed in (no-op unless kUseFirebase)
     return MaterialApp.router(
       title: 'Connect', // rename to your app name
       debugShowCheckedModeBanner: false,

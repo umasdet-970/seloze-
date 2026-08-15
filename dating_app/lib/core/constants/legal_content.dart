@@ -9,10 +9,10 @@
 library;
 
 const String kPrivacyPolicyText = '''
-Last updated: [insert date before launch]
+Last updated: 15 August 2026
 
 ## 1. Who we are
-Connect ("we", "us") operates the Connect dating app. This policy explains what personal data we collect, why, and the choices you have.
+Connect ("we", "us") operates the Connect dating app. Connect is currently operated by an individual developer and is not yet incorporated as a registered company — this section will be updated with full registered-entity details before public launch. This policy explains what personal data we collect, why, and the choices you have.
 
 ## 2. What we collect
 - Account data: email address or phone number, and authentication identifiers if you sign in with a social provider.
@@ -53,11 +53,11 @@ We use industry-standard safeguards (encryption in transit, access controls, sec
 We'll notify you of material changes in-app before they take effect.
 
 ## 11. Contact us
-[insert privacy contact email before launch]
+umamaheswar.sdet@gmail.com
 ''';
 
 const String kTermsText = '''
-Last updated: [insert date before launch]
+Last updated: 15 August 2026
 
 ## 1. Acceptance of terms
 By creating a Connect account, you agree to these Terms & Conditions and our Privacy Policy. If you don't agree, don't use the app.
@@ -93,11 +93,11 @@ You may delete your account at any time. We may suspend or terminate your accoun
 Connect is provided "as is." We do not guarantee matches, relationships, or outcomes from using the app. To the extent permitted by law, our liability to you is limited to the amount you paid us in the 12 months before a claim arose.
 
 ## 10. Governing law
-These terms are governed by the laws of [insert governing jurisdiction before launch], without regard to conflict-of-law principles, except where local consumer protection law requires otherwise.
+These terms are governed by the laws of India, without regard to conflict-of-law principles, except where local consumer protection law requires otherwise.
 
 ## 11. Changes to these terms
 We may update these terms; continued use after changes take effect means you accept the updated terms.
 
 ## 12. Contact us
-[insert legal contact email before launch]
+umamaheswar.sdet@gmail.com
 ''';

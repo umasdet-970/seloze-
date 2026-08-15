@@ -1,9 +1,14 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
+import '../../../core/config/backend_config.dart';
 import '../../../core/constants/interests.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/dating_preferences.dart';
 import '../../../data/models/profile.dart';
+import '../../../data/repositories/firebase/firebase_storage_uploader.dart';
 import '../../analytics/providers/analytics_providers.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../discover/providers/discover_providers.dart';
@@ -51,6 +56,7 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
   bool _visible = true;
 
   bool _saving = false;
+  bool _uploadingPhoto = false;
   String? _error;
 
   bool _isEditing = false;
@@ -234,6 +240,44 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
     });
   }
 
+  Future<void> _pickAndUploadPhoto(ImageSource source) async {
+    final picked = await ImagePicker().pickImage(source: source, maxWidth: 1600, imageQuality: 85);
+    if (picked == null) return;
+    setState(() => _uploadingPhoto = true);
+    try {
+      final uid = ref.read(currentUserIdProvider);
+      final url = await FirebaseStorageUploader().uploadProfilePhoto(uid, File(picked.path));
+      await _addPhotoUrl(url);
+    } catch (e) {
+      if (mounted) setState(() => _error = "Couldn't upload that photo. Please try again.");
+    } finally {
+      if (mounted) setState(() => _uploadingPhoto = false);
+    }
+  }
+
+  Future<void> _showPhotoSourceSheet() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Take a photo'),
+              onTap: () => Navigator.pop(ctx, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from gallery'),
+              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source != null) await _pickAndUploadPhoto(source);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loadingExisting) {
@@ -383,38 +427,50 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
           Text('Add photos', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
           const Text(
-            'Add at least 1 photo. (Mock build: paste an image URL — real camera/gallery upload to '
-            'Firebase Storage comes with the Firebase phase.)',
+            kUseFirebase
+                ? 'Add at least 1 photo from your camera or gallery.'
+                : 'Add at least 1 photo. (Mock build: paste an image URL — flip kUseFirebase once '
+                    'Firebase Storage is configured to upload real photos here instead.)',
             style: TextStyle(color: AppColors.textMuted, fontSize: 12),
           ),
           const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _photoUrlController,
-                  decoration: const InputDecoration(labelText: 'Image URL', border: OutlineInputBorder()),
-                  onSubmitted: _addPhotoUrl,
+          if (kUseFirebase)
+            OutlinedButton.icon(
+              onPressed: _uploadingPhoto ? null : _showPhotoSourceSheet,
+              icon: _uploadingPhoto
+                  ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.add_a_photo_outlined),
+              label: Text(_uploadingPhoto ? 'Uploading...' : 'Add a photo'),
+            )
+          else ...[
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _photoUrlController,
+                    decoration: const InputDecoration(labelText: 'Image URL', border: OutlineInputBorder()),
+                    onSubmitted: _addPhotoUrl,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              IconButton.filled(
-                onPressed: () => _addPhotoUrl(_photoUrlController.text),
-                icon: const Icon(Icons.add),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            children: _samplePhotoUrls.map((url) {
-              return ActionChip(
-                avatar: const Icon(Icons.image_outlined, size: 16),
-                label: const Text('Use sample photo'),
-                onPressed: () => _addPhotoUrl(url),
-              );
-            }).toList(),
-          ),
+                const SizedBox(width: 8),
+                IconButton.filled(
+                  onPressed: () => _addPhotoUrl(_photoUrlController.text),
+                  icon: const Icon(Icons.add),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: _samplePhotoUrls.map((url) {
+                return ActionChip(
+                  avatar: const Icon(Icons.image_outlined, size: 16),
+                  label: const Text('Use sample photo'),
+                  onPressed: () => _addPhotoUrl(url),
+                );
+              }).toList(),
+            ),
+          ],
           const SizedBox(height: 20),
           if (_photoUrls.isNotEmpty)
             Wrap(

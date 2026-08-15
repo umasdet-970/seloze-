@@ -1,9 +1,11 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/report_sheet.dart';
+import '../../../shared/widgets/shimmer_placeholders.dart';
 import '../../chat/providers/chat_providers.dart';
 import '../../discover/providers/discover_providers.dart';
 import '../providers/matches_providers.dart';
@@ -16,6 +18,7 @@ class MatchesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final matchesAsync = ref.watch(matchesProvider);
+    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
 
     return SafeArea(
       child: Padding(
@@ -25,14 +28,14 @@ class MatchesScreen extends ConsumerWidget {
           children: [
             Text('Matches', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 4),
-            const Text('People you and you both liked', style: TextStyle(color: AppColors.textMuted)),
+            Text('People you and you both liked', style: TextStyle(color: onSurfaceVariant)),
             const SizedBox(height: 20),
             Expanded(
               child: matchesAsync.when(
                 data: (matches) {
                   if (matches.isEmpty) {
-                    return const Center(
-                      child: Text('No matches yet — keep swiping in Discover!', style: TextStyle(color: AppColors.textMuted)),
+                    return Center(
+                      child: Text('No matches yet — keep swiping in Discover!', style: TextStyle(color: onSurfaceVariant)),
                     );
                   }
                   return ListView.separated(
@@ -85,7 +88,7 @@ class MatchesScreen extends ConsumerWidget {
                                       ),
                                       const SizedBox(height: 2),
                                       Text('Matched ${_relativeTime(match.matchedAt)}',
-                                          style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                                          style: TextStyle(color: onSurfaceVariant, fontSize: 12)),
                                     ],
                                   ),
                                 ),
@@ -106,7 +109,11 @@ class MatchesScreen extends ConsumerWidget {
                     },
                   );
                 },
-                loading: () => const Center(child: CircularProgressIndicator()),
+                loading: () => ListView.separated(
+                  itemCount: 5,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (_, __) => const ShimmerListTile(),
+                ),
                 error: (err, _) => Center(child: Text('Something went wrong: $err')),
               ),
             ),
@@ -123,11 +130,17 @@ class MatchesScreen extends ConsumerWidget {
     switch (action) {
       case 'unmatch':
         final confirmed = await _confirm(context, 'Unmatch $targetName?', 'You can still match again later if you both like each other.');
-        if (confirmed == true) await social.unmatch(uid, targetId);
+        if (confirmed == true) {
+          HapticFeedback.mediumImpact();
+          await social.unmatch(uid, targetId);
+        }
         break;
       case 'block':
         final confirmed = await _confirm(context, 'Block $targetName?', 'They will disappear from your Discover and this match will be removed.');
-        if (confirmed == true) await social.block(uid, targetId);
+        if (confirmed == true) {
+          HapticFeedback.mediumImpact();
+          await social.block(uid, targetId);
+        }
         break;
       case 'report':
         await showReportSheet(

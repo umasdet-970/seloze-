@@ -1,6 +1,21 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Only in the debug manifest by default (added there for the Flutter
+         tool's hot reload connection) — release builds need it declared
+         here explicitly, or network image loading and any real backend
+         calls silently fail once signed/released. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Needed for image_picker's camera-capture option (Add photos step).
+         Gallery access needs no declared permission on modern Android —
+         image_picker uses the system Photos Picker, which doesn't require
+         a runtime grant. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- Android 13+ requires this to show any notification, including
+         FCM push. firebase_messaging's own manifest merge usually adds
+         this, but declaring it explicitly avoids depending on that. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
     <application
-        android:label="connect_dating_app"
+        android:label="Connect"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

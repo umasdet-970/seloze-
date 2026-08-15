@@ -1,11 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/config/backend_config.dart';
 import '../../../data/models/subscription_models.dart';
 import '../../../data/repositories/billing_repository.dart';
+import '../../../data/repositories/firebase/revenuecat_billing_repository.dart';
 import '../../discover/providers/discover_providers.dart';
 
-/// Swap MockBillingRepository() -> RevenueCatBillingRepository() once
-/// store products are configured.
-final billingRepositoryProvider = Provider<BillingRepository>((ref) => MockBillingRepository());
+final billingRepositoryProvider = Provider<BillingRepository>((ref) {
+  return kUseRevenueCat ? RevenueCatBillingRepository() : MockBillingRepository();
+});
 
 /// Dev-only region preview until real billing detects it from the store
 /// account. Surfaced explicitly on the paywall, not hidden.

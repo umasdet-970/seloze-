@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,6 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../data/models/profile.dart';
 import '../../../data/models/subscription_models.dart';
 import '../../../shared/widgets/report_sheet.dart';
+import '../../../shared/widgets/shimmer_placeholders.dart';
 import '../../notifications/providers/notification_providers.dart';
 import '../../subscription/providers/subscription_providers.dart';
 import '../providers/discover_providers.dart';
@@ -35,7 +37,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
         children: [
           _buildHeader(context, used, limit, tier),
           const SizedBox(height: 12),
-          _buildTabChips(selectedTab),
+          _buildTabChips(context, selectedTab),
           if (tier == SubscriptionTier.free) ...[
             const SizedBox(height: 12),
             _AdPlaceholder(onUpgrade: () => context.push('/paywall')),
@@ -74,7 +76,10 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
                   ),
                 );
               },
-              loading: () => const Center(child: CircularProgressIndicator()),
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20),
+                child: ShimmerCard(),
+              ),
               error: (err, _) => Center(child: Text('Something went wrong: $err')),
             ),
           ),
@@ -93,11 +98,14 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
   void _handleSwipe(CardSwiperDirection direction, Profile profile) async {
     final notifier = ref.read(discoverFeedProvider.notifier);
     if (direction == CardSwiperDirection.right || direction == CardSwiperDirection.top) {
+      HapticFeedback.mediumImpact();
       final matched = await notifier.likeTop();
       if (matched && mounted) {
+        HapticFeedback.heavyImpact();
         _showMatchDialog(profile.name);
       }
     } else if (direction == CardSwiperDirection.left) {
+      HapticFeedback.lightImpact();
       await notifier.passTop();
     }
   }
@@ -159,6 +167,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
   }
 
   Widget _buildHeader(BuildContext context, int used, int limit, SubscriptionTier tier) {
+    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
@@ -171,7 +180,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
                 const Text('Discover', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
                 Text(
                   '$used of $limit discoveries used today',
-                  style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                  style: TextStyle(color: onSurfaceVariant, fontSize: 12),
                 ),
               ],
             ),
@@ -187,7 +196,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
               backgroundColor: tier == SubscriptionTier.premium ? AppColors.primary.withOpacity(0.15) : null,
               labelStyle: TextStyle(
                 fontSize: 11,
-                color: tier == SubscriptionTier.premium ? AppColors.primary : AppColors.textMuted,
+                color: tier == SubscriptionTier.premium ? AppColors.primary : onSurfaceVariant,
               ),
             ),
           ),
@@ -222,7 +231,8 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
     );
   }
 
-  Widget _buildTabChips(DiscoverTab selected) {
+  Widget _buildTabChips(BuildContext context, DiscoverTab selected) {
+    final colorScheme = Theme.of(context).colorScheme;
     final tabs = {
       DiscoverTab.forYou: ('For You', Icons.favorite),
       DiscoverTab.nearby: ('Nearby', Icons.location_on_outlined),
@@ -242,12 +252,15 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
             child: ChoiceChip(
               label: Text(entry.value.$1),
               avatar: Icon(entry.value.$2, size: 16,
-                  color: isSelected ? Colors.white : AppColors.textMuted),
+                  color: isSelected ? Colors.white : colorScheme.onSurfaceVariant),
               selected: isSelected,
-              onSelected: (_) => ref.read(discoverTabProvider.notifier).state = entry.key,
+              onSelected: (_) {
+                HapticFeedback.selectionClick();
+                ref.read(discoverTabProvider.notifier).state = entry.key;
+              },
               selectedColor: AppColors.primary,
-              labelStyle: TextStyle(color: isSelected ? Colors.white : AppColors.textDark),
-              backgroundColor: Colors.white,
+              labelStyle: TextStyle(color: isSelected ? Colors.white : colorScheme.onSurface),
+              backgroundColor: colorScheme.surface,
               shape: StadiumBorder(side: BorderSide(color: Colors.grey.shade200)),
             ),
           );
@@ -266,6 +279,7 @@ class _AdPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Container(
@@ -277,10 +291,10 @@ class _AdPlaceholder extends StatelessWidget {
         ),
         child: Row(
           children: [
-            const Icon(Icons.campaign_outlined, size: 18, color: AppColors.textMuted),
+            Icon(Icons.campaign_outlined, size: 18, color: onSurfaceVariant),
             const SizedBox(width: 8),
-            const Expanded(
-              child: Text('Advertisement', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+            Expanded(
+              child: Text('Advertisement', style: TextStyle(color: onSurfaceVariant, fontSize: 12)),
             ),
             TextButton(onPressed: onUpgrade, child: const Text('Remove ads', style: TextStyle(fontSize: 12))),
           ],
@@ -298,13 +312,14 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(limitReached ? Icons.lock_clock_outlined : Icons.search_off, size: 64, color: AppColors.textMuted),
+            Icon(limitReached ? Icons.lock_clock_outlined : Icons.search_off, size: 64, color: onSurfaceVariant),
             const SizedBox(height: 12),
             Text(
               limitReached ? "You've hit today's discovery limit" : "You're all caught up!",
@@ -316,7 +331,7 @@ class _EmptyState extends StatelessWidget {
               limitReached
                   ? 'Upgrade to Premium for 50 discoveries a day, or come back tomorrow.'
                   : 'Check back later for new profiles.',
-              style: const TextStyle(color: AppColors.textMuted),
+              style: TextStyle(color: onSurfaceVariant),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),

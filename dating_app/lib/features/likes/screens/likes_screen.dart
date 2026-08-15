@@ -2,12 +2,14 @@ import 'dart:ui';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/notification_item.dart';
 import '../../../data/models/profile.dart';
 import '../../../data/models/subscription_models.dart';
+import '../../../shared/widgets/shimmer_placeholders.dart';
 import '../../discover/providers/discover_providers.dart';
 import '../../notifications/providers/notification_providers.dart';
 import '../../subscription/providers/subscription_providers.dart';
@@ -24,6 +26,7 @@ class LikesScreen extends ConsumerWidget {
     final likesAsync = ref.watch(receivedLikesProvider);
     final tier = ref.watch(subscriptionTierProvider);
     final isPremium = tier == SubscriptionTier.premium;
+    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
 
     return SafeArea(
       child: Padding(
@@ -33,14 +36,14 @@ class LikesScreen extends ConsumerWidget {
           children: [
             Text('Likes', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 4),
-            const Text('People who liked your profile', style: TextStyle(color: AppColors.textMuted)),
+            Text('People who liked your profile', style: TextStyle(color: onSurfaceVariant)),
             const SizedBox(height: 20),
             Expanded(
               child: likesAsync.when(
                 data: (profiles) {
                   if (profiles.isEmpty) {
-                    return const Center(
-                      child: Text('No likes yet — keep swiping in Discover!', style: TextStyle(color: AppColors.textMuted)),
+                    return Center(
+                      child: Text('No likes yet — keep swiping in Discover!', style: TextStyle(color: onSurfaceVariant)),
                     );
                   }
                   final grid = GridView.builder(
@@ -86,10 +89,10 @@ class LikesScreen extends ConsumerWidget {
                                     style: const TextStyle(fontWeight: FontWeight.bold),
                                   ),
                                   const SizedBox(height: 4),
-                                  const Text(
+                                  Text(
                                     'Upgrade to Premium to see who and match instantly.',
                                     textAlign: TextAlign.center,
-                                    style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                                    style: TextStyle(color: onSurfaceVariant, fontSize: 12),
                                   ),
                                   const SizedBox(height: 12),
                                   FilledButton(
@@ -105,7 +108,16 @@ class LikesScreen extends ConsumerWidget {
                     ],
                   );
                 },
-                loading: () => const Center(child: CircularProgressIndicator()),
+                loading: () => GridView.builder(
+                  itemCount: 6,
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
+                    childAspectRatio: 0.72,
+                  ),
+                  itemBuilder: (_, __) => const ShimmerGridTile(),
+                ),
                 error: (err, _) => Center(child: Text('Something went wrong: $err')),
               ),
             ),
@@ -130,11 +142,13 @@ class _LikeTileState extends ConsumerState<_LikeTile> {
 
   Future<void> _likeBack() async {
     setState(() => _busy = true);
+    HapticFeedback.mediumImpact();
     final uid = ref.read(currentUserIdProvider);
     final result = await ref.read(socialRepositoryProvider).like(uid, widget.profile.id);
     if (!mounted) return;
     setState(() => _busy = false);
     if (result.matched) {
+      HapticFeedback.heavyImpact();
       ref.read(notificationRepositoryProvider).add(
             uid,
             NotificationType.mutualMatch,
@@ -155,6 +169,7 @@ class _LikeTileState extends ConsumerState<_LikeTile> {
 
   Future<void> _pass() async {
     setState(() => _busy = true);
+    HapticFeedback.lightImpact();
     await ref.read(socialRepositoryProvider).pass(ref.read(currentUserIdProvider), widget.profile.id);
   }
 

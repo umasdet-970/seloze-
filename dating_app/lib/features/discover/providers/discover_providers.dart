@@ -1,8 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/config/backend_config.dart';
 import '../../../data/models/discover_filters.dart';
 import '../../../data/models/notification_item.dart';
 import '../../../data/models/profile.dart';
 import '../../../data/models/subscription_models.dart';
+import '../../../data/repositories/firebase/firestore_profile_repository.dart';
+import '../../../data/repositories/firebase/firestore_social_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/repositories/social_repository.dart';
 import '../../analytics/providers/analytics_providers.dart';
@@ -10,14 +13,12 @@ import '../../auth/providers/auth_providers.dart';
 import '../../notifications/providers/notification_providers.dart';
 import '../../subscription/providers/subscription_providers.dart';
 
-/// Swap MockProfileRepository() -> FirestoreProfileRepository() when ready.
 final profileRepositoryProvider = Provider<ProfileRepository>((ref) {
-  return MockProfileRepository();
+  return kUseFirebase ? FirestoreProfileRepository() : MockProfileRepository();
 });
 
-/// Swap MockSocialRepository() -> FirestoreSocialRepository() when ready.
 final socialRepositoryProvider = Provider<SocialRepository>((ref) {
-  return MockSocialRepository();
+  return kUseFirebase ? FirestoreSocialRepository() : MockSocialRepository();
 });
 
 /// Derived from the signed-in user (see auth_providers.dart). Empty until

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/subscription_models.dart';
 import '../../../shared/widgets/report_sheet.dart';
+import '../../../shared/widgets/shimmer_placeholders.dart';
 import '../../discover/providers/discover_providers.dart';
 import '../../subscription/providers/subscription_providers.dart';
 import '../providers/chat_providers.dart';
@@ -18,6 +19,7 @@ class ChatListScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tier = ref.watch(subscriptionTierProvider);
     final isPremium = tier == SubscriptionTier.premium;
+    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
 
     return SafeArea(
       child: Padding(
@@ -27,7 +29,7 @@ class ChatListScreen extends ConsumerWidget {
           children: [
             Text('Messages', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 4),
-            const Text('Chat with your matches', style: TextStyle(color: AppColors.textMuted)),
+            Text('Chat with your matches', style: TextStyle(color: onSurfaceVariant)),
             const SizedBox(height: 20),
             Expanded(child: isPremium ? _ConversationList() : const _ChatLockedState()),
           ],
@@ -42,6 +44,7 @@ class _ChatLockedState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -52,10 +55,10 @@ class _ChatLockedState extends StatelessWidget {
             const SizedBox(height: 16),
             const Text('Chat is a Premium feature', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Upgrade to Premium for unlimited messaging with your matches.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted),
+              style: TextStyle(color: onSurfaceVariant),
             ),
             const SizedBox(height: 16),
             FilledButton(
@@ -73,12 +76,13 @@ class _ConversationList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final conversationsAsync = ref.watch(conversationsProvider);
+    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
 
     return conversationsAsync.when(
       data: (conversations) {
         if (conversations.isEmpty) {
-          return const Center(
-            child: Text('No matches yet — get swiping in Discover!', style: TextStyle(color: AppColors.textMuted)),
+          return Center(
+            child: Text('No matches yet — get swiping in Discover!', style: TextStyle(color: onSurfaceVariant)),
           );
         }
         return ListView.separated(
@@ -87,7 +91,11 @@ class _ConversationList extends ConsumerWidget {
           itemBuilder: (context, index) => _ConversationTile(conversation: conversations[index]),
         );
       },
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => ListView.separated(
+        itemCount: 6,
+        separatorBuilder: (_, __) => const SizedBox(height: 4),
+        itemBuilder: (_, __) => const ShimmerListTile(),
+      ),
       error: (err, _) => Center(child: Text('Something went wrong: $err')),
     );
   }
@@ -102,6 +110,7 @@ class _ConversationTile extends ConsumerWidget {
     final profile = conversation.profile;
     final lastMessage = conversation.lastMessage;
     final hasUnread = conversation.unreadCount > 0;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return ListTile(
       contentPadding: EdgeInsets.zero,
@@ -142,7 +151,7 @@ class _ConversationTile extends ConsumerWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
-          color: hasUnread ? AppColors.textDark : AppColors.textMuted,
+          color: hasUnread ? colorScheme.onSurface : colorScheme.onSurfaceVariant,
           fontWeight: hasUnread ? FontWeight.w600 : FontWeight.normal,
         ),
       ),

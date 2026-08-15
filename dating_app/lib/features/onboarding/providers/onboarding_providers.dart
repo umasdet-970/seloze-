@@ -1,12 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/config/backend_config.dart';
 import '../../../data/models/profile.dart';
+import '../../../data/repositories/firebase/firestore_user_profile_repository.dart';
 import '../../../data/repositories/user_profile_repository.dart';
 import '../../discover/providers/discover_providers.dart';
 
-/// Swap MockUserProfileRepository() -> FirestoreUserProfileRepository()
-/// once Firebase is wired in.
 final userProfileRepositoryProvider = Provider<UserProfileRepository>((ref) {
-  return MockUserProfileRepository();
+  return kUseFirebase ? FirestoreUserProfileRepository() : MockUserProfileRepository();
 });
 
 /// The signed-in user's own profile, re-fetched whenever it changes
