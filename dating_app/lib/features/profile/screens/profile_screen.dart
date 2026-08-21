@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -70,6 +72,24 @@ class ProfileScreen extends ConsumerWidget {
   }
 }
 
+/// `Profile.photoUrls` holds a plain HTTPS URL once uploaded to Firebase
+/// Storage, but can also hold a local device file path when no cloud
+/// backend is configured (kUseFirebase off — see
+/// CreateProfileScreen._pickPhoto, where the photo itself is always
+/// real, just not always uploaded). `Image.network` throws ("No host
+/// specified") on a local path, so this picks the right widget for
+/// whichever kind of value is actually there.
+Widget _ownPhotoThumbnail(List<String> photoUrls) {
+  if (photoUrls.isEmpty) {
+    return Container(width: 64, height: 64, color: Colors.grey.shade300, child: const Icon(Icons.person));
+  }
+  final first = photoUrls.first;
+  final isRemoteUrl = first.startsWith('http://') || first.startsWith('https://');
+  return isRemoteUrl
+      ? Image.network(first, width: 64, height: 64, fit: BoxFit.cover)
+      : Image.file(File(first), width: 64, height: 64, fit: BoxFit.cover);
+}
+
 class _ProfileSummaryCard extends StatelessWidget {
   final Profile profile;
 
@@ -88,9 +108,7 @@ class _ProfileSummaryCard extends StatelessWidget {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(14),
-            child: profile.photoUrls.isNotEmpty
-                ? Image.network(profile.photoUrls.first, width: 64, height: 64, fit: BoxFit.cover)
-                : Container(width: 64, height: 64, color: Colors.grey.shade300, child: const Icon(Icons.person)),
+            child: _ownPhotoThumbnail(profile.photoUrls),
           ),
           const SizedBox(width: 16),
           Expanded(

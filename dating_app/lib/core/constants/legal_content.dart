@@ -12,7 +12,7 @@ const String kPrivacyPolicyText = '''
 Last updated: 15 August 2026
 
 ## 1. Who we are
-Connect ("we", "us") operates the Connect dating app. Connect is currently operated by an individual developer and is not yet incorporated as a registered company — this section will be updated with full registered-entity details before public launch. This policy explains what personal data we collect, why, and the choices you have.
+Seloze ("we", "us") operates the Seloze dating app. Seloze is currently operated by an individual developer and is not yet incorporated as a registered company — this section will be updated with full registered-entity details before public launch. This policy explains what personal data we collect, why, and the choices you have.
 
 ## 2. What we collect
 - Account data: email address or phone number, and authentication identifiers if you sign in with a social provider.
@@ -41,10 +41,10 @@ We retain your data while your account is active. If you delete your account, we
 Depending on where you live, you may have rights to access, correct, export, or delete your data, and to object to certain processing. You can delete your account and data at any time from Settings → Delete account. To exercise other rights, contact us at the address below.
 
 ## 7. Children's privacy
-Connect is restricted to users 18 and older. We do not knowingly collect data from anyone under 18. If we learn a user is underage, we will suspend the account and delete associated data.
+Seloze is restricted to users 18 and older. We do not knowingly collect data from anyone under 18. If we learn a user is underage, we will suspend the account and delete associated data.
 
 ## 8. International transfers
-Because Connect operates across many countries, your data may be processed in a country other than where you live. We apply appropriate safeguards for cross-border transfers where required by local law.
+Because Seloze operates across many countries, your data may be processed in a country other than where you live. We apply appropriate safeguards for cross-border transfers where required by local law.
 
 ## 9. Security
 We use industry-standard safeguards (encryption in transit, access controls, secure image storage) to protect your data, but no system is perfectly secure.
@@ -60,10 +60,10 @@ const String kTermsText = '''
 Last updated: 15 August 2026
 
 ## 1. Acceptance of terms
-By creating a Connect account, you agree to these Terms & Conditions and our Privacy Policy. If you don't agree, don't use the app.
+By creating a Seloze account, you agree to these Terms & Conditions and our Privacy Policy. If you don't agree, don't use the app.
 
 ## 2. Eligibility
-You must be at least 18 years old and legally able to form a binding contract in your country to use Connect. You confirm the information you provide, including your date of birth, is accurate.
+You must be at least 18 years old and legally able to form a binding contract in your country to use Seloze. You confirm the information you provide, including your date of birth, is accurate.
 
 ## 3. Your account
 You're responsible for keeping your login credentials secure and for all activity on your account. Tell us immediately if you suspect unauthorized access.
@@ -84,13 +84,13 @@ You keep ownership of the photos, bio, and messages you post, but you grant us a
 Premium and Ad-Free subscriptions renew automatically at the price shown at purchase until cancelled. Payments are processed by the Apple App Store or Google Play Store; refunds are subject to their respective policies. You can manage or cancel your subscription from Settings → Subscription or your app store account settings.
 
 ## 7. Safety
-Connect provides tools to block and report other users, but we cannot guarantee the conduct of other members, on or off the app. Meet new people safely: video chat before meeting in person, meet in public places, and tell a friend your plans.
+Seloze provides tools to block and report other users, but we cannot guarantee the conduct of other members, on or off the app. Meet new people safely: video chat before meeting in person, meet in public places, and tell a friend your plans.
 
 ## 8. Termination
 You may delete your account at any time. We may suspend or terminate your account for violating these terms, engaging in fraud, or to comply with legal obligations.
 
 ## 9. Disclaimers and liability
-Connect is provided "as is." We do not guarantee matches, relationships, or outcomes from using the app. To the extent permitted by law, our liability to you is limited to the amount you paid us in the 12 months before a claim arose.
+Seloze is provided "as is." We do not guarantee matches, relationships, or outcomes from using the app. To the extent permitted by law, our liability to you is limited to the amount you paid us in the 12 months before a claim arose.
 
 ## 10. Governing law
 These terms are governed by the laws of India, without regard to conflict-of-law principles, except where local consumer protection law requires otherwise.

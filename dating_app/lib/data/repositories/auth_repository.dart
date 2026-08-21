@@ -57,6 +57,11 @@ class MockAuthRepository implements AuthRepository {
 
   static const _mockOtpCode = '123456';
 
+  /// Trim + lowercase so "User@Example.com " (signup) and "user@example.com"
+  /// (login) match the same in-memory account — mirrors Firebase Auth's own
+  /// case-insensitive email handling (see FirebaseAuthRepository).
+  String _normalizeEmail(String email) => email.trim().toLowerCase();
+
   @override
   AppUser? get currentUser => _currentUser;
 
@@ -73,14 +78,15 @@ class MockAuthRepository implements AuthRepository {
   @override
   Future<AppUser> signUpWithEmail({required String email, required String password}) async {
     await _delay();
+    final normalizedEmail = _normalizeEmail(email);
     if (password.length < 6) {
       throw AuthException('Password must be at least 6 characters.');
     }
-    if (_accountsByEmail.containsKey(email)) {
+    if (_accountsByEmail.containsKey(normalizedEmail)) {
       throw AuthException('An account with this email already exists.');
     }
-    final user = AppUser(uid: 'uid-${DateTime.now().microsecondsSinceEpoch}', email: email);
-    _accountsByEmail[email] = _MockAccount(password: password, user: user);
+    final user = AppUser(uid: 'uid-${DateTime.now().microsecondsSinceEpoch}', email: normalizedEmail);
+    _accountsByEmail[normalizedEmail] = _MockAccount(password: password, user: user);
     _setUser(user);
     return user;
   }
@@ -88,7 +94,7 @@ class MockAuthRepository implements AuthRepository {
   @override
   Future<AppUser> signInWithEmail({required String email, required String password}) async {
     await _delay();
-    final account = _accountsByEmail[email];
+    final account = _accountsByEmail[_normalizeEmail(email)];
     if (account == null || account.password != password) {
       throw AuthException('Incorrect email or password.');
     }
@@ -152,7 +158,7 @@ class MockAuthRepository implements AuthRepository {
       age--;
     }
     if (age < 18) {
-      throw AuthException('You must be at least 18 years old to use Connect.');
+      throw AuthException('You must be at least 18 years old to use Seloze.');
     }
 
     final updated = user.copyWith(ageVerified: true, dateOfBirth: dateOfBirth);

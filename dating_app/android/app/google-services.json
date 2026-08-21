@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "196230871568",
+    "project_id": "connect-dating-app-e2ad4",
+    "storage_bucket": "connect-dating-app-e2ad4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:196230871568:android:80696083db4593bd57a895",
+        "android_client_info": {
+          "package_name": "com.connect.connect_dating_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "196230871568-epul2e3clelsgfnkmata1up9vt5nqbcn.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.connect.connect_dating_app",
+            "certificate_hash": "a46d81691716c29a6b2b0f672c63290aa8971cd1"
+          }
+        },
+        {
+          "client_id": "196230871568-paeov5c1odv5nsnl5cgmm28iqn0mhfu9.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.connect.connect_dating_app",
+            "certificate_hash": "8ddfb8cb9bfa2b050ca9859807860c4baaca580e"
+          }
+        },
+        {
+          "client_id": "196230871568-ffchk86qp4696ee4p23qn2bmdqpgomea.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD4eQK7GmYm_FDn_jeOEsUUTs--4moTxV8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "196230871568-ffchk86qp4696ee4p23qn2bmdqpgomea.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -50,7 +50,19 @@ dependencies:
   # ad unit/app IDs (see lib/core/config/ad_config.dart) — unlike Firebase/
   # RevenueCat above, these work with no AdMob account at all, so kUseAds
   # defaults true rather than false.
-  google_mobile_ads: ^5.1.0
+  #
+  # Pinned to >=7.0.0 (not the ^5.1.0 originally used): every version
+  # from 5.1.0 through 6.x has a Gradle 9-incompatible `build.gradle`
+  # (`for (config : configurations.all)`, invalid on Gradle 9's
+  # ConfigurationContainer) — 7.0.0 is the first release that rewrote
+  # this to `configurations.any { }`. Confirmed by downloading and
+  # diffing each version's android/build.gradle directly, not just the
+  # changelog. No breaking Dart API changes between 5.x and 7.x affect
+  # the Banner Ad surface this app uses (BannerAd/AdWidget/AdRequest/
+  # BannerAdListener/MobileAds.instance.initialize) — see that version's
+  # CHANGELOG.md for the full (unrelated: native-ad-template, mediation,
+  # AdMessageCodec) list of what actually changed.
+  google_mobile_ads: ^7.0.0
 
   # Real-time push/text/photo moderation (spec section 12/19), calling
   # Cloud Functions that wrap Cloud Vision / Cloud Natural Language.
@@ -69,12 +81,16 @@ dependencies:
   # this shows an actual heads-up local notification for it.
   flutter_local_notifications: ^18.0.1
 
-  # Acquisition source (spec section 17), Android only — queries the
-  # real Google Play Install Referrer API (a first-party Play Store
-  # capability, free, no AdMob/MMP account needed) once at first
-  # sign-up. See core/config docs and AcquisitionSourceService for what
-  # this can and can't capture on iOS.
-  android_play_install_referrer: ^0.4.0
+  # Acquisition source (spec section 17), Android only — real Google
+  # Play Install Referrer data (a first-party Play Store capability,
+  # free, no AdMob/MMP account needed) once at first sign-up. Called
+  # directly via a MethodChannel to Google's own
+  # com.android.installreferrer library (see MainActivity.kt) rather
+  # than the `android_play_install_referrer` pub.dev wrapper — that
+  # package is stuck at compileSdk 33 with no newer release, which
+  # fails Gradle's AAR-metadata check against this project's other
+  # dependencies. See AcquisitionSourceService for the Dart side and
+  # what this can/can't capture on iOS.
 
 dev_dependencies:
   flutter_test:

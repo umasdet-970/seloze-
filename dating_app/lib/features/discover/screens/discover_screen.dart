@@ -188,7 +188,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
         children: [
-          IconButton(icon: const Icon(Icons.menu), onPressed: () {}),
+          IconButton(icon: const Icon(Icons.menu), onPressed: () => context.push('/settings')),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

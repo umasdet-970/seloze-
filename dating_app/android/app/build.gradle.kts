@@ -5,6 +5,9 @@ plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+    // Applies google-services.json (project connect-dating-app-e2ad4) to
+    // this module — must come after com.android.application.
+    id("com.google.gms.google-services")
 }
 
 val keystoreProperties = Properties()
@@ -21,6 +24,11 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // Required by flutter_local_notifications (used for foreground
+        // push presentation, spec section 7/13) — it uses java.time APIs
+        // under the hood for scheduling, which need desugaring to run on
+        // API levels below 26. Matching dependency declared below.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
@@ -73,6 +81,25 @@ kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
+}
+
+dependencies {
+    // Google's own Play Install Referrer library (acquisition-source
+    // tracking, spec section 17) — called directly via a MethodChannel
+    // in MainActivity.kt instead of through the `android_play_install_referrer`
+    // pub.dev wrapper, which is stuck at compileSdk 33 with no newer
+    // release and fails Gradle's AAR-metadata check against this
+    // project's other dependencies. Compiles against this app's own
+    // compileSdk (set above via flutter.compileSdkVersion), so there's
+    // no version-skew to hit — same real Google API, no wrapper.
+    implementation("com.android.installreferrer:installreferrer:2.2")
+
+    // Pairs with isCoreLibraryDesugaringEnabled above — version chosen
+    // as the current latest stable per Google's Maven repo metadata
+    // (dl.google.com), not the older 1.2.2 flutter_local_notifications'
+    // own README example still shows, since that predates this
+    // project's AGP 9.1.0/Gradle 9.3.1.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }
 
 flutter {

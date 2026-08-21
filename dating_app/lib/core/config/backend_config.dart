@@ -11,7 +11,7 @@
 /// repository provider reads this flag to choose between its
 /// `Mock*Repository` and `Firebase*`/`Firestore*Repository` implementation
 /// — this is the only place that decision is made.
-const bool kUseFirebase = false;
+const bool kUseFirebase = true;
 
 /// Same idea, for billing. Flip to `true` only after:
 /// 1. Creating a RevenueCat account/project and adding your Android app.
@@ -41,4 +41,4 @@ const bool kUseRevenueCat = false;
 /// Falls back to the same rule-based checks used when this is `false`
 /// if the Cloud Function call fails for any reason (not deployed yet,
 /// network error) — see `CloudModerationRepository`.
-const bool kUseCloudModeration = false;
+const bool kUseCloudModeration = true;

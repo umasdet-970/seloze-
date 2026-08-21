@@ -52,10 +52,13 @@ export const moderateImage = onCall(async (request): Promise<ModerationResponse>
       return { allowed: true, category: "none", reason: null };
     }
 
+    // @google-cloud/vision types safe.adult/violence/racy as its own
+    // Likelihood enum (whose members are these same string literals), not
+    // plain `string` — cast so this array's type matches the runtime value.
     const checks: Array<[string, string | null | undefined]> = [
-      ["adult", safe.adult],
-      ["violence", safe.violence],
-      ["racy", safe.racy],
+      ["adult", safe.adult as string | null | undefined],
+      ["violence", safe.violence as string | null | undefined],
+      ["racy", safe.racy as string | null | undefined],
     ];
 
     for (const [label, likelihood] of checks) {

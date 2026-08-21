@@ -1,6 +1,8 @@
 import 'dart:io';
 
-import 'package:android_play_install_referrer/android_play_install_referrer.dart';
+import 'package:flutter/services.dart';
+
+const _installReferrerChannel = MethodChannel('connect/install_referrer');
 
 /// Acquisition source (spec section 17), captured once at first sign-up
 /// — see `_ensureUserDoc` in firebase_auth_repository.dart, which writes
@@ -8,12 +10,19 @@ import 'package:android_play_install_referrer/android_play_install_referrer.dart
 ///
 /// **Android only, real data**: queries the Google Play Install
 /// Referrer API — a free, first-party Play Store capability available
-/// to any app regardless of AdMob/MMP account status, and parses the
-/// `utm_source`/`utm_medium` query-string-style referrer Play attaches
-/// when the install came from a tracked link (e.g. a Google/Meta ad
-/// click-through). Returns 'Organic/Direct' whenever there's no
-/// referrer to parse — a sideloaded/debug build, an organic Play Store
-/// search result, or (always) an iOS device.
+/// to any app regardless of AdMob/MMP account status — via a
+/// MethodChannel straight to Google's own
+/// `com.android.installreferrer` library (implemented natively in
+/// `android/.../MainActivity.kt`), not the `android_play_install_referrer`
+/// pub.dev wrapper. That wrapper is stuck at compileSdk 33 with no
+/// newer release, which fails Gradle's AAR-metadata check once other
+/// dependencies (google_mobile_ads, Firebase) require compileSdk 34+ —
+/// see MainActivity.kt's doc comment for the full story. Parses the
+/// same `utm_source`/`utm_medium` query-string-style referrer Play
+/// attaches when the install came from a tracked link (e.g. a
+/// Google/Meta ad click-through). Returns 'Organic/Direct' whenever
+/// there's no referrer to parse — a sideloaded/debug build, an organic
+/// Play Store search result, or (always) an iOS device.
 ///
 /// **iOS has no equivalent captured here.** Apple doesn't expose an
 /// install-referrer API the way Play does; real iOS attribution needs
@@ -39,8 +48,13 @@ class AcquisitionSourceService {
     if (!Platform.isAndroid) return 'Organic/Direct';
 
     try {
-      final details = await AndroidPlayInstallReferrer.installReferrer;
-      final referrer = details.installReferrer;
+      // The native side always resolves (never throws) — a timeout here
+      // is still worth having in case the InstallReferrerClient
+      // connection callback never fires on some OEM's Play Services
+      // build, which would otherwise hang first sign-up indefinitely.
+      final referrer = await _installReferrerChannel
+          .invokeMethod<String>('getInstallReferrer')
+          .timeout(const Duration(seconds: 5), onTimeout: () => null);
       if (referrer == null || referrer.isEmpty) return 'Organic/Direct';
 
       final params = Uri.splitQueryString(referrer);

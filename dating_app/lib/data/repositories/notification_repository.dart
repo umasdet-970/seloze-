@@ -42,7 +42,7 @@ class MockNotificationRepository implements NotificationRepository {
         id: '${_nextId++}',
         type: NotificationType.reportUpdate,
         title: 'Your report was reviewed',
-        body: 'Thanks for helping keep Connect safe — our team took action on your report.',
+        body: 'Thanks for helping keep Seloze safe — our team took action on your report.',
         createdAt: now.subtract(const Duration(days: 1)),
         read: true,
       ),

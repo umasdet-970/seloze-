@@ -46,3 +46,17 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Gradle build output when run directly under android/ (not just /build/)
+/android/build/
+/android/.gradle/
+
+# Firebase CLI local hosting cache
+/.firebase/
+
+# Release signing secrets — never commit these
+android/key.properties
+android/*.jks
+android/*.keystore
+android/RELEASE_KEYSTORE_PASSWORD_DO_NOT_COMMIT.txt
+functions/REVENUECAT_WEBHOOK_SECRET_DO_NOT_COMMIT.txt

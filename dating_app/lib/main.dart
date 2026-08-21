@@ -39,7 +39,7 @@ class ConnectApp extends ConsumerWidget {
     ref.watch(pushRegistrarProvider); // registers this device's FCM token once signed in (no-op unless kUseFirebase)
     ref.watch(presenceRegistrarProvider); // starts the online/offline heartbeat once signed in (no-op unless kUseFirebase)
     return MaterialApp.router(
-      title: 'Connect', // rename to your app name
+      title: 'Seloze',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),

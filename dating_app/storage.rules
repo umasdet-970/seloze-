@@ -1,0 +1,22 @@
+rules_version = '2';
+
+// Deploy with: firebase deploy --only storage
+// (requires the Firebase CLI + `firebase use <project-id>` first).
+//
+// Matches the single path FirebaseStorageUploader actually writes to
+// (see lib/data/repositories/firebase/firebase_storage_uploader.dart):
+// profile_photos/{uid}/{filename}. Photos are readable by any signed-in
+// user (Discover/matches/chat need to show other users' photos), but only
+// the owning uid can write into their own folder — mirrors the
+// isOwner(uid) pattern in firestore.rules.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /profile_photos/{uid}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+  }
+}

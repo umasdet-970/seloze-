@@ -68,7 +68,7 @@ class _AgeVerificationScreenState extends ConsumerState<AgeVerificationScreen> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Connect is for adults 18 and over. This stays private and is not shown on your profile.',
+                'Seloze is for adults 18 and over. This stays private and is not shown on your profile.',
                 style: TextStyle(color: AppColors.textMuted),
               ),
               const SizedBox(height: 32),

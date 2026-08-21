@@ -11,7 +11,7 @@ import '../../../firebase_options.dart';
 
 const _androidChannel = AndroidNotificationChannel(
   'connect_messages',
-  'Connect notifications',
+  'Seloze notifications',
   description: 'New likes, matches, messages, and other account activity.',
   importance: Importance.high,
 );

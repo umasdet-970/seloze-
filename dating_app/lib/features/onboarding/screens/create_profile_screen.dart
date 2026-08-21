@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/config/backend_config.dart';
@@ -18,12 +19,6 @@ import '../../safety/providers/moderation_providers.dart';
 import '../providers/onboarding_providers.dart';
 
 const _genderOptions = ['Woman', 'Man', 'Non-binary', 'Other'];
-
-const _samplePhotoUrls = [
-  'https://images.unsplash.com/photo-1552374196-c4e7ffc6e126?w=800',
-  'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=800',
-  'https://images.unsplash.com/photo-1607746882042-944635dfe10e?w=800',
-];
 
 /// Core user flow steps 3-5 (spec section 23): create profile, upload
 /// photos, set location & preferences — one gate before Discover unlocks.
@@ -45,7 +40,6 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
   final _educationController = TextEditingController();
   final _cityController = TextEditingController();
   final _countryController = TextEditingController();
-  final _photoUrlController = TextEditingController();
 
   String? _gender;
   final Set<String> _interests = {};
@@ -64,6 +58,7 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
 
   bool _isEditing = false;
   bool _loadingExisting = true;
+  String? _loadError;
   Profile? _existingProfile;
 
   @override
@@ -74,37 +69,53 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
 
   /// Doubles this wizard as the "Edit profile" screen (spec section 14):
   /// if a profile already exists, prefill every field from it instead of
-  /// starting blank.
+  /// starting blank. On failure (e.g. a transient network blip), stays on
+  /// a retry screen rather than silently proceeding as if there were no
+  /// existing profile — that would let _finish() overwrite a real
+  /// profile's fields with blanks.
   Future<void> _loadExisting() async {
-    final uid = ref.read(currentUserIdProvider);
-    final repo = ref.read(userProfileRepositoryProvider);
-    final profile = await repo.fetchMyProfile(uid);
-    final preferences = await repo.fetchPreferences(uid);
+    setState(() {
+      _loadingExisting = true;
+      _loadError = null;
+    });
+    try {
+      final uid = ref.read(currentUserIdProvider);
+      final repo = ref.read(userProfileRepositoryProvider);
+      final profile = await repo.fetchMyProfile(uid);
+      final preferences = await repo.fetchPreferences(uid);
 
-    if (profile != null) {
-      _nameController.text = profile.name;
-      _bioController.text = profile.bio;
-      _professionController.text = profile.profession;
-      _educationController.text = profile.education;
-      _cityController.text = profile.city;
-      _countryController.text = profile.country;
-      _gender = profile.gender.isNotEmpty ? profile.gender : null;
-      _interests.addAll(profile.interests);
-      _photoUrls.addAll(profile.photoUrls);
-      _intention = preferences.intention;
-      _relationshipPreference = preferences.relationshipPreference;
-      _showMe = preferences.showMe;
-      _ageRange = RangeValues(preferences.minAge.toDouble(), preferences.maxAge.toDouble());
-      _maxDistance = preferences.maxDistanceKm;
-      _visible = preferences.profileVisible;
-    }
+      if (profile != null) {
+        _nameController.text = profile.name;
+        _bioController.text = profile.bio;
+        _professionController.text = profile.profession;
+        _educationController.text = profile.education;
+        _cityController.text = profile.city;
+        _countryController.text = profile.country;
+        _gender = profile.gender.isNotEmpty ? profile.gender : null;
+        _interests.addAll(profile.interests);
+        _photoUrls.addAll(profile.photoUrls);
+        _intention = preferences.intention;
+        _relationshipPreference = preferences.relationshipPreference;
+        _showMe = preferences.showMe;
+        _ageRange = RangeValues(preferences.minAge.toDouble(), preferences.maxAge.toDouble());
+        _maxDistance = preferences.maxDistanceKm;
+        _visible = preferences.profileVisible;
+      }
 
-    if (mounted) {
-      setState(() {
-        _existingProfile = profile;
-        _isEditing = profile != null;
-        _loadingExisting = false;
-      });
+      if (mounted) {
+        setState(() {
+          _existingProfile = profile;
+          _isEditing = profile != null;
+          _loadingExisting = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loadError = "Couldn't load your profile. Check your connection and try again.";
+          _loadingExisting = false;
+        });
+      }
     }
   }
 
@@ -117,7 +128,6 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
     _educationController.dispose();
     _cityController.dispose();
     _countryController.dispose();
-    _photoUrlController.dispose();
     super.dispose();
   }
 
@@ -239,28 +249,75 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
     }
   }
 
-  Future<void> _addPhotoUrl(String url) async {
-    if (url.trim().isEmpty || _photoUrls.contains(url.trim())) return;
-    final moderation = await ref.read(moderationRepositoryProvider).moderatePhoto(url.trim());
+  /// Runs a freshly picked/uploaded photo through moderation and either
+  /// appends it (a new photo) or overwrites [replaceIndex] (replacing an
+  /// existing one) — the one commit path both "add" and "replace" share,
+  /// so neither can bypass the moderation gate the other goes through.
+  Future<void> _commitPhoto(String pathOrUrl, {int? replaceIndex}) async {
+    final moderation = await ref.read(moderationRepositoryProvider).moderatePhoto(pathOrUrl);
     if (!moderation.allowed) {
-      setState(() => _error = moderation.reason);
+      if (mounted) setState(() => _error = moderation.reason);
       return;
     }
+    if (!mounted) return;
     setState(() {
-      _photoUrls.add(url.trim());
-      _photoUrlController.clear();
+      if (replaceIndex != null) {
+        _photoUrls[replaceIndex] = pathOrUrl;
+      } else if (!_photoUrls.contains(pathOrUrl)) {
+        _photoUrls.add(pathOrUrl);
+      }
       _error = null;
     });
   }
 
-  Future<void> _pickAndUploadPhoto(ImageSource source) async {
-    final picked = await ImagePicker().pickImage(source: source, maxWidth: 1600, imageQuality: 85);
-    if (picked == null) return;
+  /// Opens the real device camera/gallery (never a URL field, never a
+  /// sample photo) and commits whatever comes back. [replaceIndex] set
+  /// means "replace this existing photo" instead of adding a new one —
+  /// same picker, same upload/commit path either way.
+  Future<void> _pickPhoto(ImageSource source, {int? replaceIndex}) async {
+    final ImagePicker picker;
+    try {
+      picker = ImagePicker();
+    } catch (_) {
+      if (mounted) setState(() => _error = "Couldn't open the photo picker. Please try again.");
+      return;
+    }
+
+    XFile? picked;
+    try {
+      picked = await picker.pickImage(source: source, maxWidth: 1600, imageQuality: 85);
+    } on PlatformException catch (e) {
+      // camera_access_denied / photo_access_denied (permission refused),
+      // or any other platform-side failure — surfaced, not silently
+      // swallowed, since the user explicitly asked for a photo and
+      // nothing happened. A plain cancel (picked == null below) is NOT
+      // an error and must stay silent.
+      if (mounted) {
+        setState(() {
+          _error = e.code.contains('denied')
+              ? 'Camera/photo permission was denied. Enable it in your phone\'s Settings to add photos.'
+              : "Couldn't access the camera or gallery. Please try again.";
+        });
+      }
+      return;
+    }
+    if (picked == null) return; // user cancelled — not an error, nothing to show
+
     setState(() => _uploadingPhoto = true);
     try {
-      final uid = ref.read(currentUserIdProvider);
-      final url = await FirebaseStorageUploader().uploadProfilePhoto(uid, File(picked.path));
-      await _addPhotoUrl(url);
+      if (kUseFirebase) {
+        final uid = ref.read(currentUserIdProvider);
+        final url = await FirebaseStorageUploader().uploadProfilePhoto(uid, File(picked.path));
+        await _commitPhoto(url, replaceIndex: replaceIndex);
+      } else {
+        // No Firebase project connected in this build (kUseFirebase is
+        // off) — the photo is still 100% real (picked from the device's
+        // own camera/gallery, never a sample), just kept as a local file
+        // path instead of an uploaded HTTPS URL. Once kUseFirebase is
+        // flipped on for a real launch, every photo goes through the
+        // Storage upload branch above instead.
+        await _commitPhoto(picked.path, replaceIndex: replaceIndex);
+      }
     } catch (e) {
       if (mounted) setState(() => _error = "Couldn't upload that photo. Please try again.");
     } finally {
@@ -268,7 +325,7 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
     }
   }
 
-  Future<void> _showPhotoSourceSheet() async {
+  Future<void> _showPhotoSourceSheet({int? replaceIndex}) async {
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
       builder: (ctx) => SafeArea(
@@ -288,13 +345,51 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
         ),
       ),
     );
-    if (source != null) await _pickAndUploadPhoto(source);
+    if (source != null) await _pickPhoto(source, replaceIndex: replaceIndex);
+  }
+
+  void _removePhoto(int index) {
+    setState(() {
+      _photoUrls.removeAt(index);
+      _error = null;
+    });
+  }
+
+  /// `Profile.photoUrls` holds plain HTTPS URLs once uploaded to Firebase
+  /// Storage, but a local file path (kUseFirebase off — see _pickPhoto)
+  /// needs `Image.file`, not `Image.network`, to actually render.
+  Widget _photoThumbnail(String pathOrUrl) {
+    final isRemoteUrl = pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://');
+    if (isRemoteUrl) {
+      return Image.network(pathOrUrl, width: 100, height: 100, fit: BoxFit.cover);
+    }
+    return Image.file(File(pathOrUrl), width: 100, height: 100, fit: BoxFit.cover);
   }
 
   @override
   Widget build(BuildContext context) {
     if (_loadingExisting) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    if (_loadError != null) {
+      return Scaffold(
+        body: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(_loadError!, textAlign: TextAlign.center),
+                  const SizedBox(height: 16),
+                  FilledButton(onPressed: _loadExisting, child: const Text('Retry')),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
     }
 
     return Scaffold(
@@ -440,68 +535,30 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
           Text('Add photos', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
           const Text(
-            kUseFirebase
-                ? 'Add at least 1 photo from your camera or gallery.'
-                : 'Add at least 1 photo. (Mock build: paste an image URL — flip kUseFirebase once '
-                    'Firebase Storage is configured to upload real photos here instead.)',
+            'Add at least 1 photo from your camera or gallery. Tap a photo to replace it, or the × to remove it.',
             style: TextStyle(color: AppColors.textMuted, fontSize: 12),
           ),
-          const SizedBox(height: 16),
-          if (kUseFirebase)
-            OutlinedButton.icon(
-              onPressed: _uploadingPhoto ? null : _showPhotoSourceSheet,
-              icon: _uploadingPhoto
-                  ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.add_a_photo_outlined),
-              label: Text(_uploadingPhoto ? 'Uploading...' : 'Add a photo'),
-            )
-          else ...[
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _photoUrlController,
-                    decoration: const InputDecoration(labelText: 'Image URL', border: OutlineInputBorder()),
-                    onSubmitted: _addPhotoUrl,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton.filled(
-                  onPressed: () => _addPhotoUrl(_photoUrlController.text),
-                  icon: const Icon(Icons.add),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              children: _samplePhotoUrls.map((url) {
-                return ActionChip(
-                  avatar: const Icon(Icons.image_outlined, size: 16),
-                  label: const Text('Use sample photo'),
-                  onPressed: () => _addPhotoUrl(url),
-                );
-              }).toList(),
-            ),
-          ],
           const SizedBox(height: 20),
-          if (_photoUrls.isNotEmpty)
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: _photoUrls.map((url) {
-                return Stack(
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              for (var i = 0; i < _photoUrls.length; i++)
+                Stack(
                   clipBehavior: Clip.none,
                   children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: Image.network(url, width: 100, height: 100, fit: BoxFit.cover),
+                    GestureDetector(
+                      onTap: _uploadingPhoto ? null : () => _showPhotoSourceSheet(replaceIndex: i),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: _photoThumbnail(_photoUrls[i]),
+                      ),
                     ),
                     Positioned(
                       top: -8,
                       right: -8,
                       child: GestureDetector(
-                        onTap: () => setState(() => _photoUrls.remove(url)),
+                        onTap: _uploadingPhoto ? null : () => _removePhoto(i),
                         child: const CircleAvatar(
                           radius: 12,
                           backgroundColor: Colors.black87,
@@ -510,9 +567,33 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
                       ),
                     ),
                   ],
-                );
-              }).toList(),
-            ),
+                ),
+              // The "purple +" add-photo tile — always opens the real
+              // device camera/gallery picker, never a URL field or a
+              // sample image.
+              GestureDetector(
+                onTap: _uploadingPhoto ? null : () => _showPhotoSourceSheet(),
+                child: Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.primary, width: 1.5),
+                    color: AppColors.primary.withValues(alpha: 0.06),
+                  ),
+                  child: Center(
+                    child: _uploadingPhoto
+                        ? const SizedBox(
+                            height: 24,
+                            width: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                          )
+                        : const Icon(Icons.add, color: AppColors.primary, size: 32),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );

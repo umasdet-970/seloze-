@@ -91,6 +91,12 @@ class FirebaseAuthRepository implements AuthRepository {
     }
   }
 
+  /// Trim + lowercase so "User@Example.com " (signup) and "user@example.com"
+  /// (login) are treated as the same account — Firebase Auth's own uniqueness
+  /// check is already case-insensitive, but sending inconsistent casing to
+  /// `sendPasswordResetEmail`/error messages should still look the same.
+  String _normalizeEmail(String email) => email.trim().toLowerCase();
+
   AuthException _mapAuthError(fb.FirebaseAuthException e) {
     final message = switch (e.code) {
       'user-not-found' || 'wrong-password' || 'invalid-credential' => 'Incorrect email or password.',
@@ -113,7 +119,8 @@ class FirebaseAuthRepository implements AuthRepository {
   @override
   Future<AppUser> signUpWithEmail({required String email, required String password}) async {
     try {
-      final credential = await _auth.createUserWithEmailAndPassword(email: email, password: password);
+      final credential =
+          await _auth.createUserWithEmailAndPassword(email: _normalizeEmail(email), password: password);
       await _ensureUserDoc(credential.user!);
       return currentUser!;
     } on fb.FirebaseAuthException catch (e) {
@@ -124,7 +131,7 @@ class FirebaseAuthRepository implements AuthRepository {
   @override
   Future<AppUser> signInWithEmail({required String email, required String password}) async {
     try {
-      await _auth.signInWithEmailAndPassword(email: email, password: password);
+      await _auth.signInWithEmailAndPassword(email: _normalizeEmail(email), password: password);
       return currentUser!;
     } on fb.FirebaseAuthException catch (e) {
       throw _mapAuthError(e);
@@ -190,7 +197,7 @@ class FirebaseAuthRepository implements AuthRepository {
   @override
   Future<void> sendPasswordResetEmail(String email) async {
     try {
-      await _auth.sendPasswordResetEmail(email: email);
+      await _auth.sendPasswordResetEmail(email: _normalizeEmail(email));
     } on fb.FirebaseAuthException catch (e) {
       // Deliberately swallow user-not-found — matches the mock's behavior
       // of not leaking which emails have accounts.
@@ -209,7 +216,7 @@ class FirebaseAuthRepository implements AuthRepository {
       age--;
     }
     if (age < 18) {
-      throw AuthException('You must be at least 18 years old to use Connect.');
+      throw AuthException('You must be at least 18 years old to use Seloze.');
     }
 
     await _firestore.collection('users').doc(user.uid).set({
