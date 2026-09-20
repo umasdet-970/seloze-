@@ -70,35 +70,74 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  void _confirmDeleteAccount(BuildContext context, WidgetRef ref) {
-    showDialog(
+  Future<void> _confirmDeleteAccount(BuildContext context, WidgetRef ref) async {
+    final auth = ref.read(authRepositoryProvider);
+    final needsPassword = auth.deletionNeedsPassword;
+    // Grabbed before any await: deleting the account signs the user out
+    // and the router replaces this screen, after which `context` is dead
+    // — an error snackbar shown through it would silently never appear.
+    final messenger = ScaffoldMessenger.of(context);
+
+    // null = cancelled; otherwise the typed password ('' when not needed).
+    final password = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Delete account?'),
-        content: const Text('This permanently deletes your account. This cannot be undone.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
-          TextButton(
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            onPressed: () async {
-              Navigator.pop(dialogContext);
-              try {
-                await ref.read(authRepositoryProvider).deleteAccount();
-              } catch (e) {
-                // Most likely 'please sign out and back in' (Firebase
-                // requires a fresh session for account deletion) — the
-                // user needs to see this, not have it silently fail
-                // while the dialog just closes as if it worked.
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
-                }
-              }
-            },
-            child: const Text('Delete'),
-          ),
+      builder: (_) => _DeleteAccountDialog(needsPassword: needsPassword),
+    );
+    if (password == null) return;
+
+    try {
+      await auth.deleteAccount(password: needsPassword ? password : null);
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+}
+
+class _DeleteAccountDialog extends StatefulWidget {
+  final bool needsPassword;
+  const _DeleteAccountDialog({required this.needsPassword});
+
+  @override
+  State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
+  final _password = TextEditingController();
+
+  @override
+  void dispose() {
+    _password.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: const Text('Delete account?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('This permanently deletes your account, profile and photos. This cannot be undone.'),
+          if (widget.needsPassword) ...[
+            const SizedBox(height: 16),
+            TextField(
+              controller: _password,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'Confirm your password', border: OutlineInputBorder()),
+            ),
+          ],
         ],
       ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        TextButton(
+          style: TextButton.styleFrom(foregroundColor: Colors.red),
+          onPressed: () => Navigator.pop(context, _password.text),
+          child: const Text('Delete'),
+        ),
+      ],
     );
   }
 }

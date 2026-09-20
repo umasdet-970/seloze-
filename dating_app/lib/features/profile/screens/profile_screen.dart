@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/config/ad_config.dart';
+import '../../../core/config/backend_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/notification_item.dart';
 import '../../../data/models/profile.dart';
@@ -149,19 +151,39 @@ class _VerificationCard extends ConsumerStatefulWidget {
 
 class _VerificationCardState extends ConsumerState<_VerificationCard> {
   bool _requesting = false;
+  bool _requested = false;
 
   Future<void> _requestVerification() async {
     setState(() => _requesting = true);
     final uid = ref.read(currentUserIdProvider);
-    await ref.read(userProfileRepositoryProvider).requestVerification(uid);
+    try {
+      await ref.read(userProfileRepositoryProvider).requestVerification(uid);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _requesting = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+      return;
+    }
     HapticFeedback.mediumImpact();
+    // Only the in-memory mock approves instantly. The real backend just
+    // records that a review was requested — telling the user "You're
+    // verified" (and pushing that to their phone) before anyone has
+    // reviewed anything was false.
     ref.read(notificationRepositoryProvider).add(
           uid,
           NotificationType.profileVerification,
-          "You're verified! ✅",
-          'Your verified badge is now visible to other members.',
+          kUseFirebase ? 'Verification requested' : "You're verified! ✅",
+          kUseFirebase
+              ? "Thanks — we'll review your photos and let you know once it's done."
+              : 'Your verified badge is now visible to other members.',
         );
-    if (mounted) setState(() => _requesting = false);
+    if (mounted) {
+      setState(() {
+        _requesting = false;
+        _requested = kUseFirebase;
+      });
+    }
   }
 
   @override
@@ -186,19 +208,23 @@ class _VerificationCardState extends ConsumerState<_VerificationCard> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  widget.isVerified ? 'Profile verified' : 'Not verified yet',
+                  widget.isVerified
+                      ? 'Profile verified'
+                      : (_requested ? 'Verification requested' : 'Not verified yet'),
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
                 Text(
                   widget.isVerified
                       ? 'Your verified badge is visible to other members.'
-                      : 'Verify your photos to get a badge and build trust.',
+                      : (_requested
+                          ? "We'll let you know once your photos are reviewed."
+                          : 'Verify your photos to get a badge and build trust.'),
                   style: TextStyle(color: onSurfaceVariant, fontSize: 12),
                 ),
               ],
             ),
           ),
-          if (!widget.isVerified)
+          if (!widget.isVerified && !_requested)
             _requesting
                 ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
                 : TextButton(onPressed: _requestVerification, child: const Text('Verify')),
@@ -243,7 +269,12 @@ class _SubscriptionCard extends ConsumerWidget {
                 Text(
                   record.isActive
                       ? (record.autoRenew ? 'Renews automatically' : 'Auto-renew off')
-                      : '10 discoveries/day, chat locked, ads shown',
+                      : [
+                          '10 discoveries/day',
+                          // Only true when real billing exists (see chatUnlockedProvider) / ads are on.
+                          if (kUseRevenueCat) 'chat locked',
+                          if (kUseAds) 'ads shown',
+                        ].join(', '),
                   style: TextStyle(color: onSurfaceVariant, fontSize: 12),
                 ),
               ],

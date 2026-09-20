@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../data/models/subscription_models.dart';
 import '../../../shared/widgets/report_sheet.dart';
 import '../../../shared/widgets/shimmer_placeholders.dart';
 import '../../discover/providers/discover_providers.dart';
@@ -17,8 +16,7 @@ class ChatListScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tier = ref.watch(subscriptionTierProvider);
-    final isPremium = tier == SubscriptionTier.premium;
+    final isPremium = ref.watch(chatUnlockedProvider);
     final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
 
     return SafeArea(

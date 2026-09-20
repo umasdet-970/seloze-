@@ -1,26 +1,6 @@
 {
   "indexes": [
     {
-      "collectionGroup": "blocked",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [{ "fieldPath": "targetId", "order": "ASCENDING" }]
-    },
-    {
-      "collectionGroup": "matches",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [{ "fieldPath": "otherUserId", "order": "ASCENDING" }]
-    },
-    {
-      "collectionGroup": "likesReceived",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [{ "fieldPath": "fromUserId", "order": "ASCENDING" }]
-    },
-    {
-      "collectionGroup": "users",
-      "queryScope": "COLLECTION",
-      "fields": [{ "fieldPath": "profileComplete", "order": "ASCENDING" }]
-    },
-    {
       "collectionGroup": "users",
       "queryScope": "COLLECTION",
       "fields": [
@@ -29,5 +9,33 @@
       ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "blocked",
+      "fieldPath": "targetId",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "matches",
+      "fieldPath": "otherUserId",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "likesReceived",
+      "fieldPath": "fromUserId",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    }
+  ]
 }

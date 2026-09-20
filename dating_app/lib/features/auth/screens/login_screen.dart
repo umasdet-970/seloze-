@@ -92,6 +92,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
                   decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder()),
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   validator: (v) => (v == null || !v.contains('@')) ? 'Enter a valid email' : null,
                 ),
                 const SizedBox(height: 16),
@@ -99,6 +100,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   controller: _passwordController,
                   obscureText: true,
                   decoration: const InputDecoration(labelText: 'Password', border: OutlineInputBorder()),
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   validator: (v) => (v == null || v.length < 6) ? 'At least 6 characters' : null,
                 ),
                 Align(

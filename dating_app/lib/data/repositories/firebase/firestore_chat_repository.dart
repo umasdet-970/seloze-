@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/utils/rate_limiter.dart';
 import '../../models/chat_message.dart';
 import '../chat_repository.dart';
+import '../../../core/utils/stream_safety.dart';
 
 /// Firestore schema:
 ///   conversations/{conversationId}                    {participants: [a,b], hiddenFor: [uids]}
@@ -39,14 +40,14 @@ class FirestoreChatRepository implements ChatRepository {
 
     final convoRef = _firestore.collection('conversations').doc(conversationId);
 
-    convoRef.snapshots().listen((doc) {
+    convoRef.snapshots().listenSafely((doc) {
       final data = doc.data();
       _hiddenForCache[conversationId] = Set<String>.from(data?['hiddenFor'] as List? ?? const []);
       _typingCache[conversationId] = Set<String>.from(data?['typingUsers'] as List? ?? const []);
       _notify();
     });
 
-    convoRef.collection('messages').orderBy('sentAt').snapshots().listen((snap) {
+    convoRef.collection('messages').orderBy('sentAt').snapshots().listenSafely((snap) {
       _messagesCache[conversationId] = snap.docs.map((d) {
         final data = d.data();
         return ChatMessage(

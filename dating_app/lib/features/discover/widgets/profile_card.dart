@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/geo_distance.dart';
 import '../../../data/models/profile.dart';
 
 class ProfileCard extends StatelessWidget {
@@ -60,13 +61,14 @@ class ProfileCard extends StatelessWidget {
             right: 16,
             child: Row(
               children: [
-                _Badge(
-                  icon: Icons.location_on,
-                  iconColor: Colors.white,
-                  label: '${profile.distanceKm} km',
-                ),
+                if (formatDistanceKm(profile.distanceKm) != null)
+                  _Badge(
+                    icon: Icons.location_on,
+                    iconColor: Colors.white,
+                    label: formatDistanceKm(profile.distanceKm)!,
+                  ),
                 if (onMenuTap != null) ...[
-                  const SizedBox(width: 8),
+                  if (formatDistanceKm(profile.distanceKm) != null) const SizedBox(width: 8),
                   GestureDetector(
                     onTap: onMenuTap,
                     child: Container(
@@ -127,7 +129,10 @@ class ProfileCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 if (profile.profession.isNotEmpty)
-                  _IconLine(icon: Icons.work_outline, text: '${profile.profession} at ${profile.company}'),
+                  _IconLine(
+                    icon: Icons.work_outline,
+                    text: profile.company.isEmpty ? profile.profession : '${profile.profession} at ${profile.company}',
+                  ),
                 if (profile.education.isNotEmpty)
                   _IconLine(icon: Icons.school_outlined, text: profile.education),
                 const SizedBox(height: 6),

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/config/backend_config.dart';
+import '../../../data/models/dating_preferences.dart';
 import '../../../data/models/discover_filters.dart';
 import '../../../data/models/notification_item.dart';
 import '../../../data/models/profile.dart';
@@ -11,6 +12,7 @@ import '../../../data/repositories/social_repository.dart';
 import '../../analytics/providers/analytics_providers.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../notifications/providers/notification_providers.dart';
+import '../../onboarding/providers/onboarding_providers.dart';
 import '../../subscription/providers/subscription_providers.dart';
 
 final profileRepositoryProvider = Provider<ProfileRepository>((ref) {
@@ -32,10 +34,41 @@ enum DiscoverTab { forYou, nearby, newProfiles, online }
 
 final discoverTabProvider = StateProvider<DiscoverTab>((ref) => DiscoverTab.forYou);
 
+/// The signed-in user's saved dating preferences (age range, distance,
+/// "show me" — set in onboarding / Edit profile). Null until loaded, or if
+/// they can't be fetched — callers fall back to the built-in defaults.
+final datingPreferencesProvider = FutureProvider<DatingPreferences?>((ref) async {
+  final uid = ref.watch(currentUserIdProvider);
+  if (uid.isEmpty) return null;
+  try {
+    return await ref.watch(userProfileRepositoryProvider).fetchPreferences(uid);
+  } catch (_) {
+    return null;
+  }
+});
+
+/// Discover's starting filters: the user's own saved preferences, so the
+/// filter sheet doesn't open at 18–60 / 100 km after they saved 18–45 / 50.
+final discoverBaseFiltersProvider = Provider<DiscoverFilters>((ref) {
+  final prefs = ref.watch(datingPreferencesProvider).valueOrNull;
+  if (prefs == null) return const DiscoverFilters();
+  return DiscoverFilters(
+    minAge: prefs.minAge,
+    maxAge: prefs.maxAge,
+    maxDistanceKm: prefs.maxDistanceKm,
+    gender: switch (prefs.showMe) {
+      ShowMePreference.men => GenderFilter.men,
+      ShowMePreference.women => GenderFilter.women,
+      ShowMePreference.everyone => GenderFilter.everyone,
+    },
+  );
+});
+
 /// Search & Filters (spec section 15). Basic filters (age/distance/
 /// gender/search) are free; the rest require Premium — see
-/// [DiscoverFilters].
-final discoverFiltersProvider = StateProvider<DiscoverFilters>((ref) => const DiscoverFilters());
+/// [DiscoverFilters]. Starts from [discoverBaseFiltersProvider]; the user's
+/// edits in the sheet replace it until their saved preferences change.
+final discoverFiltersProvider = StateProvider<DiscoverFilters>((ref) => ref.watch(discoverBaseFiltersProvider));
 
 /// Holds the current feed of candidate profiles to swipe through, already
 /// filtered for already-swiped/blocked users, search & filters, and the
@@ -45,6 +78,10 @@ final discoverFiltersProvider = StateProvider<DiscoverFilters>((ref) => const Di
 class DiscoverFeedNotifier extends AsyncNotifier<List<Profile>> {
   @override
   Future<List<Profile>> build() async {
+    // Wait for the saved preferences before the first load, so the feed
+    // isn't fetched (and quota spent) under default filters and then
+    // immediately re-fetched once the real ones arrive.
+    await ref.watch(datingPreferencesProvider.future);
     // Re-run whenever the tab or filters change, so Search & Filters
     // actually affects the feed instead of just the chip UI state.
     ref.watch(discoverTabProvider);
@@ -121,7 +158,10 @@ class DiscoverFeedNotifier extends AsyncNotifier<List<Profile>> {
   List<Profile> _applyTab(List<Profile> profiles, DiscoverTab tab) {
     switch (tab) {
       case DiscoverTab.nearby:
-        return [...profiles]..sort((a, b) => a.distanceKm.compareTo(b.distanceKm));
+        // Distance 0 means "unknown" (no saved location), not "nearest" —
+        // those go last.
+        double rank(Profile p) => p.distanceKm <= 0 ? double.infinity : p.distanceKm;
+        return [...profiles]..sort((a, b) => rank(a).compareTo(rank(b)));
       case DiscoverTab.newProfiles:
         return profiles.reversed.toList();
       case DiscoverTab.online:

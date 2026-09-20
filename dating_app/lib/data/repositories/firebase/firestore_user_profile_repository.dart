@@ -6,6 +6,7 @@ import '../../../core/utils/profile_risk_scorer.dart';
 import '../../models/dating_preferences.dart';
 import '../../models/profile.dart';
 import '../user_profile_repository.dart';
+import '../../../core/utils/stream_safety.dart';
 
 DatingPreferences _preferencesFromMap(Map<String, dynamic>? map) {
   if (map == null) return const DatingPreferences();
@@ -58,7 +59,7 @@ class FirestoreUserProfileRepository implements UserProfileRepository {
 
   void _ensureListening(String uid) {
     if (_profileSubs.containsKey(uid)) return;
-    _profileSubs[uid] = _userDoc(uid).snapshots().listen((doc) {
+    _profileSubs[uid] = _userDoc(uid).snapshots().listenSafely((doc) {
       final data = doc.data();
       if (data == null || (data['name'] as String? ?? '').isEmpty) {
         _profileCache.remove(uid);

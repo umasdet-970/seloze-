@@ -228,6 +228,8 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
       final repo = ref.read(userProfileRepositoryProvider);
       await repo.saveProfile(uid, profile);
       await repo.savePreferences(uid, preferences);
+      // Discover's default filters come from these preferences.
+      ref.invalidate(datingPreferencesProvider);
       ref
           .read(analyticsRepositoryProvider)
           .logEvent(_isEditing ? 'profile_edited' : 'profile_completed');
@@ -469,14 +471,22 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('About you', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 16),
+          const SizedBox(height: 4),
+          const _RequiredHint(),
+          const SizedBox(height: 12),
           TextField(
             controller: _nameController,
-            decoration: const InputDecoration(labelText: 'Name', border: OutlineInputBorder()),
-            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(label: _requiredLabel('Name'), border: const OutlineInputBorder()),
+            onChanged: (_) => setState(() => _error = null),
           ),
           const SizedBox(height: 16),
-          const Text('Gender', style: TextStyle(fontWeight: FontWeight.w600)),
+          const Text.rich(
+            TextSpan(
+              text: 'Gender',
+              style: TextStyle(fontWeight: FontWeight.w600),
+              children: [TextSpan(text: ' *', style: TextStyle(color: Colors.red))],
+            ),
+          ),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -484,7 +494,10 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
               return ChoiceChip(
                 label: Text(g),
                 selected: _gender == g,
-                onSelected: (_) => setState(() => _gender = g),
+                onSelected: (_) => setState(() {
+                  _gender = g;
+                  _error = null;
+                }),
               );
             }).toList(),
           ),
@@ -492,8 +505,8 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
           TextField(
             controller: _bioController,
             maxLines: 3,
-            decoration: const InputDecoration(labelText: 'Bio', border: OutlineInputBorder()),
-            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(label: _requiredLabel('Bio'), border: const OutlineInputBorder()),
+            onChanged: (_) => setState(() => _error = null),
           ),
           const SizedBox(height: 16),
           TextField(
@@ -532,7 +545,13 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Add photos', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+          Text.rich(
+            const TextSpan(
+              text: 'Add photos',
+              children: [TextSpan(text: ' *', style: TextStyle(color: Colors.red))],
+            ),
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 4),
           const Text(
             'Add at least 1 photo from your camera or gallery. Tap a photo to replace it, or the × to remove it.',
@@ -594,6 +613,14 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
               ),
             ],
           ),
+          if (_uploadingPhoto)
+            const Padding(
+              padding: EdgeInsets.only(top: 12),
+              child: Text(
+                'Uploading and checking your photo — this can take a few seconds…',
+                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+              ),
+            ),
         ],
       ),
     );
@@ -700,6 +727,36 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
           const SizedBox(height: 24),
         ],
       ),
+    );
+  }
+}
+
+/// Field label with a red asterisk — marks the fields the wizard actually
+/// refuses to continue without (see `_canAdvance`): name, gender, bio and
+/// at least one photo. Everything else is optional.
+Widget _requiredLabel(String text) {
+  return Text.rich(
+    TextSpan(
+      text: text,
+      children: const [TextSpan(text: ' *', style: TextStyle(color: Colors.red))],
+    ),
+  );
+}
+
+/// Legend for the asterisk, shown once above the first required field.
+class _RequiredHint extends StatelessWidget {
+  const _RequiredHint();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(text: '*', style: TextStyle(color: Colors.red)),
+          TextSpan(text: ' Required'),
+        ],
+      ),
+      style: TextStyle(color: AppColors.textMuted, fontSize: 12),
     );
   }
 }

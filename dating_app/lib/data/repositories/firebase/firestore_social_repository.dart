@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/utils/rate_limiter.dart';
 import '../../models/social_models.dart';
 import '../social_repository.dart';
+import '../../../core/utils/stream_safety.dart';
 
 String _todayKey() {
   final now = DateTime.now();
@@ -60,39 +61,39 @@ class FirestoreSocialRepository implements SocialRepository {
     if (_listening.contains(uid)) return;
     _listening.add(uid);
 
-    _userSub(uid, 'swipes').snapshots().listen((snap) {
+    _userSub(uid, 'swipes').snapshots().listenSafely((snap) {
       _swipedCache[uid] = snap.docs.map((d) => d.id).toSet();
       _notify();
     });
 
-    _userSub(uid, 'blocked').snapshots().listen((snap) {
+    _userSub(uid, 'blocked').snapshots().listenSafely((snap) {
       _blockedByMeCache[uid] = snap.docs.map((d) => d.id).toSet();
       _notify();
     });
 
-    _firestore.collectionGroup('blocked').where('targetId', isEqualTo: uid).snapshots().listen((snap) {
+    _firestore.collectionGroup('blocked').where('targetId', isEqualTo: uid).snapshots().listenSafely((snap) {
       _blockedMeCache[uid] = snap.docs.map((d) => d.reference.parent.parent!.id).toSet();
       _notify();
     });
 
-    _userSub(uid, 'reported').snapshots().listen((snap) {
+    _userSub(uid, 'reported').snapshots().listenSafely((snap) {
       _reportedCache[uid] = snap.docs.map((d) => d.id).toSet();
       _notify();
     });
 
-    _userSub(uid, 'likesReceived').snapshots().listen((snap) {
+    _userSub(uid, 'likesReceived').snapshots().listenSafely((snap) {
       _likesReceivedCache[uid] = snap.docs.map((d) => d.id).toList();
       _notify();
     });
 
-    _userSub(uid, 'matches').snapshots().listen((snap) {
+    _userSub(uid, 'matches').snapshots().listenSafely((snap) {
       _matchesCache[uid] = snap.docs
           .map((d) => MatchRecord(otherUserId: d.id, matchedAt: (d.data()['matchedAt'] as Timestamp?)?.toDate() ?? DateTime.now()))
           .toList();
       _notify();
     });
 
-    _firestore.collection('users').doc(uid).collection('private').doc('quota').snapshots().listen((doc) {
+    _firestore.collection('users').doc(uid).collection('private').doc('quota').snapshots().listenSafely((doc) {
       final data = doc.data();
       final date = data?['date'] as String? ?? '';
       final ids = Set<String>.from(data?['shownIds'] as List? ?? const []);

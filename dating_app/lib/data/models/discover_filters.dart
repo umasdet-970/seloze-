@@ -58,6 +58,22 @@ class DiscoverFilters {
       education.isNotEmpty ||
       interests.isNotEmpty;
 
+  /// Whether anything differs from [base] — the user's own saved defaults
+  /// (see `discoverBaseFiltersProvider`), not the hard-coded ones. Drives
+  /// the "filters active" dot on the tune icon: someone who saved 18–45 /
+  /// 50 km in onboarding hasn't "applied a filter" just by opening Discover.
+  bool differsFrom(DiscoverFilters base) =>
+      searchQuery.isNotEmpty ||
+      minAge != base.minAge ||
+      maxAge != base.maxAge ||
+      maxDistanceKm != base.maxDistanceKm ||
+      gender != base.gender ||
+      verifiedOnly ||
+      onlineOnly ||
+      profession.isNotEmpty ||
+      education.isNotEmpty ||
+      interests.isNotEmpty;
+
   DiscoverFilters copyWith({
     String? searchQuery,
     int? minAge,

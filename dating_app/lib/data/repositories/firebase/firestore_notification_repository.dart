@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../models/notification_item.dart';
 import '../notification_repository.dart';
+import '../../../core/utils/stream_safety.dart';
 
 /// Firestore schema: `users/{uid}/notifications/{id}` {type, title, body,
 /// createdAt, read}.
@@ -29,7 +30,7 @@ class FirestoreNotificationRepository implements NotificationRepository {
   void _ensureListening(String uid) {
     if (_listening.contains(uid)) return;
     _listening.add(uid);
-    _sub(uid).orderBy('createdAt', descending: true).snapshots().listen((snap) {
+    _sub(uid).orderBy('createdAt', descending: true).snapshots().listenSafely((snap) {
       _cache[uid] = snap.docs.map((d) {
         final data = d.data();
         return NotificationItem(

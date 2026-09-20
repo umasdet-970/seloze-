@@ -110,6 +110,19 @@ export const cleanupUserOnDelete = functionsV1.auth.user().onDelete(async (user)
   const uid = user.uid;
   const userRef = admin.firestore().collection("users").doc(uid);
 
+  // Every step runs even if an earlier one throws — a failure in (say) the
+  // cross-user sweep must never leave the deleted user's own data or photos
+  // behind. Failures are collected and reported together at the end.
+  const failures: string[] = [];
+  const step = async (label: string, fn: () => Promise<unknown>) => {
+    try {
+      await fn();
+    } catch (err) {
+      failures.push(label);
+      logger.error(`cleanupUserOnDelete: step "${label}" failed for ${uid}`, { uid, err });
+    }
+  };
+
   const subcollections = [
     "private",
     "swipes",
@@ -120,25 +133,43 @@ export const cleanupUserOnDelete = functionsV1.auth.user().onDelete(async (user)
     "notifications",
   ];
   for (const name of subcollections) {
-    await deleteCollection(userRef.collection(name), 200);
+    await step(`subcollection ${name}`, () => deleteCollection(userRef.collection(name), 200));
   }
 
   // The root doc itself, in case deleteAccount()'s client-side delete
   // didn't run (e.g. the auth user was removed directly from the
   // console, or the client delete failed after the auth delete
   // succeeded but before the Firestore delete did).
-  await userRef.delete().catch(() => undefined);
+  await step("root doc", () => userRef.delete());
 
-  const [staleMatches, stalePendingLikes] = await Promise.all([
-    deleteCollectionGroupWhere("matches", "otherUserId", uid, 200),
-    deleteCollectionGroupWhere("likesReceived", "fromUserId", uid, 200),
-  ]);
+  // Profile photos (see FirebaseStorageUploader: profile_photos/{uid}/...).
+  // Firestore cleanup alone left every uploaded photo in the bucket,
+  // readable by any signed-in user, after the account was deleted.
+  await step("profile photos", () =>
+    admin.storage().bucket().deleteFiles({ prefix: `profile_photos/${uid}/`, force: true })
+  );
+
+  let staleMatches = 0;
+  let stalePendingLikes = 0;
+  await step("stale matches in other users", async () => {
+    staleMatches = await deleteCollectionGroupWhere("matches", "otherUserId", uid, 200);
+  });
+  await step("stale pending likes in other users", async () => {
+    stalePendingLikes = await deleteCollectionGroupWhere("likesReceived", "fromUserId", uid, 200);
+  });
 
   logger.info(
-    `Cleaned up Firestore data for deleted user ${uid}: ` +
-      `${staleMatches} stale match reference(s), ${stalePendingLikes} stale pending like(s)`,
-    { uid, staleMatches, stalePendingLikes }
+    `Cleaned up data for deleted user ${uid}: ` +
+      `${staleMatches} stale match reference(s), ${stalePendingLikes} stale pending like(s), ` +
+      `${failures.length} failed step(s)`,
+    { uid, staleMatches, stalePendingLikes, failures }
   );
+
+  // Throwing after every step has been attempted marks the invocation as
+  // failed in the Cloud Functions dashboard/alerts without skipping work.
+  if (failures.length > 0) {
+    throw new Error(`cleanupUserOnDelete incomplete for ${uid}: ${failures.join(", ")}`);
+  }
 });
 
 async function deleteCollection(

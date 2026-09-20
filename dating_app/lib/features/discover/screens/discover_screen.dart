@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/config/ad_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/profile.dart';
 import '../../../data/models/subscription_models.dart';
@@ -15,6 +16,7 @@ import '../providers/discover_providers.dart';
 import '../widgets/action_buttons.dart';
 import '../widgets/filter_sheet.dart';
 import '../widgets/profile_card.dart';
+import '../widgets/profile_details_sheet.dart';
 
 class DiscoverScreen extends ConsumerStatefulWidget {
   const DiscoverScreen({super.key});
@@ -39,7 +41,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
           _buildHeader(context, used, limit, tier),
           const SizedBox(height: 12),
           _buildTabChips(context, selectedTab),
-          if (tier == SubscriptionTier.free) ...[
+          if (kUseAds && tier == SubscriptionTier.free) ...[
             const SizedBox(height: 12),
             _AdPlaceholder(onUpgrade: () => context.push('/paywall')),
           ],
@@ -71,6 +73,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
                       final profile = profiles[index];
                       return ProfileCard(
                         profile: profile,
+                        onInfoTap: () => showProfileDetailsSheet(context, profile),
                         onMenuTap: () => _showCardMenu(profile.id, profile.name),
                       );
                     },
@@ -218,7 +221,8 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
           ),
           Consumer(
             builder: (context, ref, _) {
-              final hasFilters = ref.watch(discoverFiltersProvider).hasActiveFilters;
+              final hasFilters =
+                  ref.watch(discoverFiltersProvider).differsFrom(ref.watch(discoverBaseFiltersProvider));
               return IconButton(
                 icon: Badge(
                   isLabelVisible: hasFilters,

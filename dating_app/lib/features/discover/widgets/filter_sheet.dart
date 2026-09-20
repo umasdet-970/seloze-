@@ -60,7 +60,7 @@ class _FilterSheetContentState extends ConsumerState<_FilterSheetContent> {
 
   void _reset() {
     setState(() {
-      _draft = const DiscoverFilters();
+      _draft = ref.read(discoverBaseFiltersProvider);
       _searchController.clear();
       _professionController.clear();
       _educationController.clear();

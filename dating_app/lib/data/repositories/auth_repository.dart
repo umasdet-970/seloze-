@@ -27,7 +27,15 @@ abstract class AuthRepository {
   Future<void> setAgeVerified(DateTime dateOfBirth);
 
   Future<void> signOut();
-  Future<void> deleteAccount();
+
+  /// True when deleting the account requires typing the account password
+  /// (email/password sign-in). Google/phone accounts confirm differently.
+  bool get deletionNeedsPassword;
+
+  /// Permanently deletes the signed-in account. Re-verifies identity first
+  /// (Firebase refuses to delete a session older than ~5 minutes) —
+  /// [password] is required when [deletionNeedsPassword] is true.
+  Future<void> deleteAccount({String? password});
 }
 
 class AuthException implements Exception {
@@ -174,7 +182,10 @@ class MockAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<void> deleteAccount() async {
+  bool get deletionNeedsPassword => false;
+
+  @override
+  Future<void> deleteAccount({String? password}) async {
     await _delay();
     final user = _currentUser;
     if (user != null) {

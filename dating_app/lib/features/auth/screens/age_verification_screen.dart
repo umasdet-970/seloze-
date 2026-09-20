@@ -27,7 +27,14 @@ class _AgeVerificationScreenState extends ConsumerState<AgeVerificationScreen> {
       firstDate: DateTime(now.year - 100),
       lastDate: now,
     );
-    if (picked != null) setState(() => _dateOfBirth = picked);
+    // A new date makes the previous rejection ("must be at least 18")
+    // stale — it stayed on screen until Confirm was pressed again.
+    if (picked != null) {
+      setState(() {
+        _dateOfBirth = picked;
+        _error = null;
+      });
+    }
   }
 
   Future<void> _confirm() async {

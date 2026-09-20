@@ -17,7 +17,10 @@ import 'dart:io';
 /// 4. iOS also needs a real `SKAdNetworkItems` list in Info.plist for
 ///    ad-attribution (Google's docs have the current list) — not added
 ///    here since it's a large static list unrelated to app logic.
-const bool kUseAds = true;
+// Off for the first Play Store release: the IDs below are Google's TEST ad
+// units, which AdMob policy forbids serving to real users, and there is no
+// AdMob account yet. Flip to `true` only after the steps above are done.
+const bool kUseAds = false;
 
 /// Google's public test banner ad unit IDs — documented at
 /// https://developers.google.com/admob/flutter/test-ads. Guaranteed to

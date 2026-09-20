@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/config/support_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../providers/auth_providers.dart';
 
@@ -41,7 +42,7 @@ class AccountSuspendedScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'If you think this is a mistake, contact support at support@connect.app.',
+                  'If you think this is a mistake, contact support at $kSupportEmail.',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 12),
                 ),

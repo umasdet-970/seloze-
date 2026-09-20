@@ -16,3 +16,13 @@ double haversineKm(double lat1, double lng1, double lat2, double lng2) {
 }
 
 double _degToRad(double deg) => deg * pi / 180;
+
+/// Display text for a profile's distance, or null when the distance isn't
+/// known. `Profile.distanceKm` is 0 when either person has no saved
+/// location (see FirestoreProfileRepository) — showing that as "0.0 km"
+/// told viewers the person was standing next to them.
+String? formatDistanceKm(double km) {
+  if (km <= 0) return null;
+  if (km < 1) return '<1 km';
+  return '${km.round()} km';
+}

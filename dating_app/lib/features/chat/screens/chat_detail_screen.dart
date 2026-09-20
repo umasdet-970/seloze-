@@ -8,7 +8,6 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/chat_message.dart';
 import '../../../data/models/profile.dart';
-import '../../../data/models/subscription_models.dart';
 import '../../../shared/widgets/report_sheet.dart';
 import '../../analytics/providers/analytics_providers.dart';
 import '../../discover/providers/discover_providers.dart';
@@ -179,7 +178,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isPremium = ref.watch(subscriptionTierProvider) == SubscriptionTier.premium;
+    final isPremium = ref.watch(chatUnlockedProvider);
     final profile = _resolvedProfile;
     final uid = ref.watch(currentUserIdProvider);
 

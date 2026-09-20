@@ -31,6 +31,16 @@ final subscriptionTierProvider = Provider<SubscriptionTier>((ref) {
   return ref.watch(subscriptionRecordProvider).tier;
 });
 
+/// Whether the signed-in user may chat. Premium-only once real billing is
+/// live (`kUseRevenueCat`), per the spec. While billing is off there is no
+/// way to become Premium, so gating chat would mean nobody can message
+/// anyone — it opens up for everyone until RevenueCat is switched on, then
+/// locks for free users automatically.
+final chatUnlockedProvider = Provider<bool>((ref) {
+  if (!kUseRevenueCat) return true;
+  return ref.watch(subscriptionTierProvider) == SubscriptionTier.premium;
+});
+
 /// Free vs Premium gating (spec section 4: 10 vs 50 discoveries/day).
 final dailyDiscoveryLimitProvider = Provider<int>((ref) {
   final tier = ref.watch(subscriptionTierProvider);

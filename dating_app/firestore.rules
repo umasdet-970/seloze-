@@ -168,5 +168,22 @@ service cloud.firestore {
     match /{path=**}/messages/{messageId} {
       allow read: if isAdmin();
     }
+
+    // "Who has blocked me" — FirestoreSocialRepository runs
+    //   collectionGroup('blocked').where('targetId', isEqualTo: myUid)
+    // so a blocked user's Discover/matches can hide whoever blocked them.
+    // Without this rule the query was denied on every login and blocking
+    // only worked in one direction. Scoped so a signed-in user can only
+    // ever match `blocked` docs that name THEM as the target (Firestore
+    // rejects the query unless it carries that same filter).
+    //
+    // Known trade-off, documented rather than hidden: this lets a blocked
+    // user's client learn which uids blocked them. The app never displays
+    // that, but a modified client could. Closing it fully would mean
+    // moving the "hide blockers" filtering into a Cloud Function so
+    // clients never read these docs at all.
+    match /{path=**}/blocked/{targetId} {
+      allow read: if signedIn() && resource.data.targetId == request.auth.uid;
+    }
   }
 }

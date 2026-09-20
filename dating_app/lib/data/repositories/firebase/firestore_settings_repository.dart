@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../models/settings_models.dart';
 import '../settings_repository.dart';
+import '../../../core/utils/stream_safety.dart';
 
 NotificationPreferences _notifPrefsFromMap(Map<String, dynamic>? map) {
   if (map == null) return const NotificationPreferences();
@@ -45,7 +46,7 @@ class FirestoreSettingsRepository implements SettingsRepository {
   void _ensureListening(String uid) {
     if (_listening.contains(uid)) return;
     _listening.add(uid);
-    _doc(uid).snapshots().listen((doc) {
+    _doc(uid).snapshots().listenSafely((doc) {
       final data = doc.data();
       _notifCache[uid] = _notifPrefsFromMap(data?['notificationPrefs'] as Map<String, dynamic>?);
       _privacyCache[uid] = _privacyFromMap(data?['privacySettings'] as Map<String, dynamic>?);

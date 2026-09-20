@@ -7,6 +7,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import '../../models/app_user.dart';
 import '../auth_repository.dart';
 import 'acquisition_source_service.dart';
+import '../../../core/utils/stream_safety.dart';
 
 /// Real Firebase Auth + `users/{uid}` Firestore doc backing.
 ///
@@ -52,7 +53,7 @@ class FirebaseAuthRepository implements AuthRepository {
     _cachedUser = AppUser(uid: user.uid, email: user.email, phoneNumber: user.phoneNumber, displayName: user.displayName);
     _controller.add(_cachedUser);
 
-    _profileSub = _firestore.collection('users').doc(user.uid).snapshots().listen((doc) {
+    _profileSub = _firestore.collection('users').doc(user.uid).snapshots().listenSafely((doc) {
       final data = doc.data();
       _cachedUser = AppUser(
         uid: user.uid,
@@ -231,34 +232,57 @@ class FirebaseAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<void> deleteAccount() async {
+  bool get deletionNeedsPassword =>
+      _auth.currentUser?.providerData.any((p) => p.providerId == 'password') ?? false;
+
+  @override
+  Future<void> deleteAccount({String? password}) async {
     final user = _auth.currentUser;
     if (user == null) return;
-    // Deleting the auth user only removes login credentials — the
-    // Firestore doc (and subcollections: likes, matches, messages, etc.)
-    // must be cleaned up separately. `cleanupUserOnDelete` (see
-    // functions/) does this reliably server-side via the Admin SDK,
-    // which isn't subject to Firestore rules; this is a best-effort
-    // client-side attempt at just the root doc, run first because it
-    // has to — this uid's own auth context (required by firestore.rules)
-    // only exists until `user.delete()` below succeeds. If this fails,
-    // we still proceed to delete the Auth account rather than abort:
-    // that's the half that actually matters for "can this person still
-    // sign in and see my data", and the Cloud Function sweeps up
-    // anything left behind here regardless of whether this succeeded.
     try {
-      await _firestore.collection('users').doc(user.uid).delete();
-    } catch (_) {}
-
-    try {
+      // Firebase refuses to delete a session older than ~5 minutes
+      // ('requires-recent-login') — which is nearly every real session.
+      // Re-verify identity first, every time, so this works and so
+      // deleting is a deliberate "yes, it's me" step.
+      await _reauthenticate(user, password);
       await user.delete();
     } on fb.FirebaseAuthException catch (e) {
-      // Most common real-world case: 'requires-recent-login' — Firebase
-      // rejects sensitive operations like this on a session that isn't
-      // fresh. Mapped to an actionable AuthException instead of
-      // propagating Firebase's raw exception type, consistent with
-      // every other method in this repository.
       throw _mapAuthError(e);
     }
+    // Deliberately NOT deleting the Firestore profile here first. That
+    // used to run before `user.delete()`, so when the auth delete was then
+    // refused the person was left with their profile wiped but still
+    // signed in — a half-deleted account. Now the auth account goes first
+    // and `cleanupUserOnDelete` (functions/) removes the profile,
+    // subcollections, photos and other users' references server-side.
+  }
+
+  Future<void> _reauthenticate(fb.User user, String? password) async {
+    final providers = user.providerData.map((p) => p.providerId).toSet();
+    if (providers.contains('password')) {
+      if (password == null || password.isEmpty) {
+        throw AuthException('Enter your password to confirm.');
+      }
+      try {
+        await user.reauthenticateWithCredential(
+          fb.EmailAuthProvider.credential(email: user.email!, password: password),
+        );
+      } on fb.FirebaseAuthException catch (e) {
+        if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+          throw AuthException('That password is incorrect.');
+        }
+        rethrow;
+      }
+    } else if (providers.contains('google.com')) {
+      final googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) throw AuthException('Confirmation cancelled — your account was not deleted.');
+      final googleAuth = await googleUser.authentication;
+      await user.reauthenticateWithCredential(
+        fb.GoogleAuthProvider.credential(accessToken: googleAuth.accessToken, idToken: googleAuth.idToken),
+      );
+    }
+    // Phone accounts: no silent re-auth path here. If the session is too
+    // old, `user.delete()` throws 'requires-recent-login', which
+    // _mapAuthError turns into "sign out and back in, then try again".
   }
 }

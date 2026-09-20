@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/config/backend_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/notification_item.dart';
 import '../../../data/models/subscription_models.dart';
@@ -113,6 +114,13 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Real billing (RevenueCat + Play Console products) isn't switched on.
+    // The mock repository "completes" a purchase for free after a 1.4 s
+    // delay, so showing prices and Subscribe buttons here would tell
+    // people they were being charged ₹899/month while actually granting
+    // Premium for nothing. Never render the purchase UI without real billing.
+    if (!kUseRevenueCat) return const _ComingSoonScaffold();
+
     final region = ref.watch(billingRegionProvider);
     final record = ref.watch(subscriptionRecordProvider);
 
@@ -131,6 +139,7 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
                   ),
                 ),
+                const SizedBox(width: 12),
                 DropdownButton<BillingRegion>(
                   value: region,
                   underline: const SizedBox(),
@@ -169,6 +178,43 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ComingSoonScaffold extends StatelessWidget {
+  const _ComingSoonScaffold();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Upgrade')),
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.workspace_premium_outlined, size: 64, color: AppColors.primary),
+                const SizedBox(height: 16),
+                Text(
+                  'Premium is coming soon',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  "Paid plans aren't available yet. Keep using Seloze for free in the meantime — "
+                  "we'll let you know when Premium launches.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppColors.textMuted),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

@@ -58,11 +58,6 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
           ),
           const Divider(),
           const ListTile(
-            leading: Icon(Icons.devices_outlined),
-            title: Text('Active sessions'),
-            subtitle: Text('Session management requires a live backend — coming with Firebase Auth.'),
-          ),
-          const ListTile(
             leading: Icon(Icons.shield_outlined),
             title: Text('Sign-in alerts'),
             subtitle: Text("We'll notify you of new sign-ins — see Notifications."),
