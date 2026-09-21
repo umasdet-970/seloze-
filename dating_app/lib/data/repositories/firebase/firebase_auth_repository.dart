@@ -30,7 +30,20 @@ class FirebaseAuthRepository implements AuthRepository {
   final _controller = StreamController<AppUser?>.broadcast();
   AppUser? _cachedUser;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _profileSub;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _accountSub;
+  Map<String, dynamic>? _profileData;
+  Map<String, dynamic>? _accountData;
+  bool _migrating = false;
   String? _pendingOtpVerificationId;
+
+  /// Personal data lives in `users/{uid}/private/account` — readable only by
+  /// the owner (and admins) — NOT on `users/{uid}`, which every signed-in
+  /// member can read (Discover needs the profile fields on it).
+  DocumentReference<Map<String, dynamic>> _accountDoc(String uid) =>
+      _firestore.collection('users').doc(uid).collection('private').doc('account');
+
+  /// Fields that used to be stored on the world-readable profile doc.
+  static const _legacySensitiveKeys = ['email', 'phoneNumber', 'dateOfBirth', 'fcmTokens'];
 
   @override
   AppUser? get currentUser => _cachedUser;
@@ -40,7 +53,11 @@ class FirebaseAuthRepository implements AuthRepository {
 
   Future<void> _onFirebaseUserChanged(fb.User? user) async {
     await _profileSub?.cancel();
+    await _accountSub?.cancel();
     _profileSub = null;
+    _accountSub = null;
+    _profileData = null;
+    _accountData = null;
 
     if (user == null) {
       _cachedUser = null;
@@ -54,18 +71,69 @@ class FirebaseAuthRepository implements AuthRepository {
     _controller.add(_cachedUser);
 
     _profileSub = _firestore.collection('users').doc(user.uid).snapshots().listenSafely((doc) {
-      final data = doc.data();
-      _cachedUser = AppUser(
-        uid: user.uid,
-        email: user.email,
-        phoneNumber: user.phoneNumber,
-        displayName: (data?['name'] as String?) ?? user.displayName,
-        ageVerified: data?['ageVerified'] as bool? ?? false,
-        dateOfBirth: (data?['dateOfBirth'] as Timestamp?)?.toDate(),
-        accountStatus: data?['accountStatus'] as String? ?? 'active',
-      );
-      _controller.add(_cachedUser);
+      _profileData = doc.data();
+      _emitUser(user);
+      _migrateLegacyFields(user, _profileData);
     });
+    _accountSub = _accountDoc(user.uid).snapshots().listenSafely((doc) {
+      _accountData = doc.data();
+      _emitUser(user);
+    });
+  }
+
+  void _emitUser(fb.User user) {
+    final data = _profileData;
+    // Date of birth comes from the private account doc; the profile-doc copy
+    // is only a fallback for accounts that haven't been migrated yet.
+    final dob = (_accountData?['dateOfBirth'] as Timestamp?)?.toDate() ?? (data?['dateOfBirth'] as Timestamp?)?.toDate();
+    _cachedUser = AppUser(
+      uid: user.uid,
+      email: user.email,
+      phoneNumber: user.phoneNumber,
+      displayName: (data?['name'] as String?) ?? user.displayName,
+      ageVerified: data?['ageVerified'] as bool? ?? false,
+      dateOfBirth: dob,
+      accountStatus: data?['accountStatus'] as String? ?? 'active',
+    );
+    _controller.add(_cachedUser);
+  }
+
+  /// One-time, self-service move of personal fields that older app versions
+  /// stored on the world-readable profile doc (email, phone, date of birth,
+  /// push tokens) into the owner-only account doc. Runs the first time a
+  /// migrated build sees such a profile; afterwards the fields are gone and
+  /// this is a no-op. Never throws.
+  Future<void> _migrateLegacyFields(fb.User user, Map<String, dynamic>? data) async {
+    if (data == null || _migrating) return;
+    final legacy = {
+      for (final key in _legacySensitiveKeys)
+        if (data.containsKey(key) && data[key] != null) key: data[key],
+    };
+    if (legacy.isEmpty) return;
+
+    _migrating = true;
+    try {
+      final tokens = legacy['fcmTokens'];
+      final batch = _firestore.batch();
+      batch.set(
+        _accountDoc(user.uid),
+        {
+          ...legacy,
+          // Merge push tokens instead of overwriting any the new build already saved.
+          if (tokens is List) 'fcmTokens': FieldValue.arrayUnion(tokens),
+        },
+        SetOptions(merge: true),
+      );
+      batch.update(
+        _firestore.collection('users').doc(user.uid),
+        {for (final key in legacy.keys) key: FieldValue.delete()},
+      );
+      await batch.commit();
+    } catch (_) {
+      // Try again on the next profile snapshot.
+    } finally {
+      _migrating = false;
+    }
   }
 
   Future<void> _ensureUserDoc(fb.User user) async {
@@ -88,9 +156,10 @@ class FirebaseAuthRepository implements AuthRepository {
         // this user completes their profile (never for self-invites).
         if (attribution.inviterUid != null && attribution.inviterUid != user.uid)
           'invitedBy': attribution.inviterUid,
-        // Mirrored from Firebase Auth (not read from there directly) so
-        // the admin dashboard — a plain Firestore client with no Admin
-        // SDK access to Auth records — has something to display/search.
+      }, SetOptions(merge: true));
+      // Email / phone are personal data: owner-only account doc (admins can
+      // read it for support), never the profile doc other members can read.
+      await _accountDoc(user.uid).set({
         if (user.email != null) 'email': user.email,
         if (user.phoneNumber != null) 'phoneNumber': user.phoneNumber,
       }, SetOptions(merge: true));
@@ -225,9 +294,13 @@ class FirebaseAuthRepository implements AuthRepository {
       throw AuthException('You must be at least 18 years old to use Seloze.');
     }
 
+    // Date of birth is private (owner-only account doc); only the yes/no
+    // `ageVerified` sits on the profile doc other members can read.
+    await _accountDoc(user.uid).set({
+      'dateOfBirth': Timestamp.fromDate(dateOfBirth),
+    }, SetOptions(merge: true));
     await _firestore.collection('users').doc(user.uid).set({
       'ageVerified': true,
-      'dateOfBirth': Timestamp.fromDate(dateOfBirth),
       if (termsVersion != null) ...{
         'termsAcceptedAt': FieldValue.serverTimestamp(),
         'termsVersion': termsVersion,

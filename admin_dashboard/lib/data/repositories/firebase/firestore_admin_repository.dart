@@ -50,6 +50,13 @@ class FirestoreAdminRepository implements AdminRepository {
   static const _reportCacheLimit = 200;
 
   final Map<String, Map<String, dynamic>> _rawUsers = {};
+
+  // Email / phone live in `users/{uid}/private/account` (owner-only; admins can
+  // read it) and no longer on the world-readable profile doc. Fetched once per
+  // user in the background and cached; the dashboard falls back to the legacy
+  // profile-doc fields for accounts not migrated yet.
+  final Map<String, String> _contacts = {};
+  final Set<String> _fetchingContacts = {};
   final Map<String, Map<String, dynamic>> _rawReports = {};
   final Map<String, Map<String, dynamic>> _rawAuditLog = {};
   final Set<String> _fetchingUserIds = {};
@@ -68,6 +75,23 @@ class FirestoreAdminRepository implements AdminRepository {
 
   void _notify() => _controller.add(null);
 
+  Future<void> _loadContact(String uid) async {
+    if (_contacts.containsKey(uid) || !_fetchingContacts.add(uid)) return;
+    try {
+      final doc = await _firestore.collection('users').doc(uid).collection('private').doc('account').get();
+      final data = doc.data();
+      final contact = (data?['email'] as String?) ?? (data?['phoneNumber'] as String?);
+      if (contact != null) {
+        _contacts[uid] = contact;
+        _notify();
+      }
+    } catch (_) {
+      // Not readable yet (rules not redeployed) — keep the legacy fallback.
+    } finally {
+      _fetchingContacts.remove(uid);
+    }
+  }
+
   void _startListening() {
     _firestore
         .collection('users')
@@ -79,6 +103,9 @@ class FirestoreAdminRepository implements AdminRepository {
         ..clear()
         ..addEntries(snap.docs.map((d) => MapEntry(d.id, d.data())));
       _notify();
+      for (final d in snap.docs) {
+        _loadContact(d.id);
+      }
     }, onError: (_) {
       // Most likely cause: signed in but missing the `admin` claim, or
       // rules not yet redeployed. Leave the cache empty rather than crash
@@ -397,7 +424,7 @@ class FirestoreAdminRepository implements AdminRepository {
     return AdminUser(
       id: uid,
       name: (name == null || name.isEmpty) ? '(no profile yet)' : name,
-      email: (data['email'] as String?) ?? (data['phoneNumber'] as String?) ?? '—',
+      email: _contacts[uid] ?? (data['email'] as String?) ?? (data['phoneNumber'] as String?) ?? '—',
       country: (data['country'] as String?)?.trim().isNotEmpty == true ? data['country'] as String : 'Unknown',
       joinedAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       status: status,

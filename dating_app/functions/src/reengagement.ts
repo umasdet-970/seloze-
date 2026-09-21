@@ -84,9 +84,10 @@ export const sendReengagementPush = onSchedule(
       cursor = page.docs[page.docs.length - 1];
       counts.scanned += page.size;
 
-      const [reSnaps, settingsSnaps] = await Promise.all([
+      const [reSnaps, settingsSnaps, accountSnaps] = await Promise.all([
         db.getAll(...page.docs.map((d) => db.collection("reengagement").doc(d.id))),
         db.getAll(...page.docs.map((d) => d.ref.collection("private").doc("settings"))),
+        db.getAll(...page.docs.map((d) => d.ref.collection("private").doc("account"))),
       ]);
 
       for (let i = 0; i < page.docs.length; i += CONCURRENCY) {
@@ -95,10 +96,13 @@ export const sendReengagementPush = onSchedule(
             const reSnap = reSnaps[i + j];
             const data = doc.data();
             const prefs = settingsSnaps[i + j].data()?.notificationPrefs;
+            // Tokens moved to the owner-only `private/account` doc; profile
+            // docs not yet migrated by the app still carry them.
+            const tokens = accountSnaps[i + j].data()?.fcmTokens ?? data.fcmTokens;
             const candidate: Candidate = {
               profileComplete: data.profileComplete === true,
               accountActive: (data.accountStatus ?? "active") === "active",
-              hasToken: Array.isArray(data.fcmTokens) && data.fcmTokens.length > 0,
+              hasToken: Array.isArray(tokens) && tokens.length > 0,
               promotionalOptIn: prefs?.promotional !== false,
               lastSentAtMs: reSnap.data()?.lastSentAt?.toMillis?.(),
             };

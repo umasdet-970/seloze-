@@ -177,19 +177,46 @@ test("notifications: anyone signed in can create one for a member, only the owne
 // The Privacy Policy says other members are NOT shown a member's email, phone
 // number or date of birth. These check what the rules actually allow another
 // signed-in member's app to READ from the shared profile document.
-test("PRIVACY: another member cannot read a profile's email, phone, date of birth or push tokens", async () => {
-  await seed((db) =>
-    setDoc(doc(db, "users/alice"), {
-      name: "Alice",
-      email: "alice@example.com",
-      phoneNumber: "+910000000000",
-      dateOfBirth: "2000-01-01",
-      fcmTokens: ["tok"],
-    })
-  );
+// The app keeps those fields in users/{uid}/private/account, not on the shared
+// profile doc. The profile doc is readable by every member, so the first test
+// mirrors what the app writes now and confirms nothing personal is on it; the
+// rest confirm who can read the account doc itself.
+const APP_PROFILE_DOC = { name: "Alice", ageVerified: true, accountStatus: "active" };
+const ACCOUNT_DOC = {
+  email: "alice@example.com",
+  phoneNumber: "+910000000000",
+  dateOfBirth: "2000-01-01",
+  fcmTokens: ["tok"],
+};
+
+test("PRIVACY: the profile doc the app writes carries no email, phone, date of birth or push tokens", async () => {
+  await seed(async (db) => {
+    await setDoc(doc(db, "users/alice"), APP_PROFILE_DOC);
+    await setDoc(doc(db, "users/alice/private/account"), ACCOUNT_DOC);
+  });
   const data = (await assertSucceeds(getDoc(doc(as("bob"), "users/alice")))).data();
-  const leaked = ["email", "phoneNumber", "dateOfBirth", "fcmTokens"].filter((f) => f in data);
+  const leaked = Object.keys(ACCOUNT_DOC).filter((f) => f in data);
   if (leaked.length > 0) {
     throw new Error(`readable by any other signed-in member: ${leaked.join(", ")}`);
   }
+});
+
+test("PRIVACY: the account doc is readable only by its owner and admins", async () => {
+  await seed((db) => setDoc(doc(db, "users/alice/private/account"), ACCOUNT_DOC));
+  await assertSucceeds(getDoc(doc(as("alice"), "users/alice/private/account")));
+  await assertSucceeds(getDoc(doc(as("boss", { admin: true }), "users/alice/private/account")));
+  await assertFails(getDoc(doc(as("bob"), "users/alice/private/account")));
+  await assertFails(getDoc(doc(anon(), "users/alice/private/account")));
+});
+
+test("PRIVACY: admins can read the account doc but not other members' private settings", async () => {
+  await seed((db) => setDoc(doc(db, "users/alice/private/settings"), { a: 1 }));
+  await assertFails(getDoc(doc(as("boss", { admin: true }), "users/alice/private/settings")));
+});
+
+test("the owner can save their own account doc (email, date of birth, push token) but nobody else can", async () => {
+  await assertSucceeds(setDoc(doc(as("alice"), "users/alice/private/account"), ACCOUNT_DOC, { merge: true }));
+  await assertSucceeds(updateDoc(doc(as("alice"), "users/alice/private/account"), { fcmTokens: ["tok2"] }));
+  await assertFails(setDoc(doc(as("bob"), "users/alice/private/account"), { email: "evil@example.com" }));
+  await assertFails(updateDoc(doc(as("boss", { admin: true }), "users/alice/private/account"), { email: "x@example.com" }));
 });

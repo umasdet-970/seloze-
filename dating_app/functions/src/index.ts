@@ -13,7 +13,7 @@ export { sendReengagementPush } from "./reengagement";
 /**
  * Push delivery (spec section 13). The mobile app's PushNotificationService
  * (lib/data/repositories/firebase/push_notification_service.dart) already
- * registers each signed-in device's FCM token onto `users/{uid}.fcmTokens`,
+ * registers each signed-in device's FCM token onto `users/{uid}/private/account`,
  * and every event (new like, match, message, etc. — see
  * NotificationRepository on the client) writes an in-app record to
  * `users/{uid}/notifications/{id}` with {type, title, body, createdAt, read}.
@@ -33,8 +33,18 @@ export const sendPushOnNotificationCreate = onDocumentCreated(
     const uid = event.params.uid;
     const notification = snapshot.data();
 
-    const userDoc = await admin.firestore().collection("users").doc(uid).get();
-    const tokens: string[] = userDoc.data()?.fcmTokens ?? [];
+    // Push tokens live in the owner-only `private/account` doc. Accounts that
+    // haven't opened the updated app yet still have them on the public profile
+    // doc, so fall back to that until the client migrates them.
+    const db = admin.firestore();
+    const accountRef = db.collection("users").doc(uid).collection("private").doc("account");
+    const [accountDoc, userDoc] = await Promise.all([
+      accountRef.get(),
+      db.collection("users").doc(uid).get(),
+    ]);
+    const accountTokens: string[] = accountDoc.data()?.fcmTokens ?? [];
+    const legacyTokens: string[] = userDoc.data()?.fcmTokens ?? [];
+    const tokens = Array.from(new Set([...accountTokens, ...legacyTokens]));
     if (tokens.length === 0) {
       logger.info(`No FCM tokens for ${uid}, skipping push`, { uid });
       return;
@@ -67,11 +77,12 @@ export const sendPushOnNotificationCreate = onDocumentCreated(
       }
     });
     if (deadTokens.length > 0) {
-      await admin
-        .firestore()
-        .collection("users")
-        .doc(uid)
-        .update({ fcmTokens: admin.firestore.FieldValue.arrayRemove(...deadTokens) });
+      const remove = admin.firestore.FieldValue.arrayRemove(...deadTokens);
+      // `set(..., merge)` so a missing account doc doesn't fail the prune.
+      await accountRef.set({ fcmTokens: remove }, { merge: true });
+      if (legacyTokens.length > 0) {
+        await db.collection("users").doc(uid).update({ fcmTokens: remove });
+      }
       logger.info(`Removed ${deadTokens.length} dead FCM token(s) for ${uid}`, { uid });
     }
   }

@@ -147,7 +147,10 @@ class PushNotificationService {
   }
 
   Future<void> _saveToken(String uid, String token) async {
-    await _firestore.collection('users').doc(uid).set({
+    // Push tokens live in the owner-only account doc, not the profile doc
+    // that every signed-in member can read. The sendPushOnNotificationCreate
+    // Cloud Function reads them from here (Admin SDK).
+    await _firestore.collection('users').doc(uid).collection('private').doc('account').set({
       'fcmTokens': FieldValue.arrayUnion([token]),
     }, SetOptions(merge: true));
   }

@@ -48,8 +48,11 @@ service cloud.firestore {
 
       match /private/{docId} {
         // Preferences, settings, and the daily discovery quota are never
-        // shown to other users.
-        allow read: if isOwner(uid);
+        // shown to other users. `account` holds personal data — email, phone,
+        // date of birth, push tokens — which must NOT sit on the profile doc
+        // above (any signed-in member can read that). Only the owner reads it,
+        // plus admins, for support and moderation.
+        allow read: if isOwner(uid) || (isAdmin() && docId == 'account');
         // `rewards` (invite-a-friend referralCount) is written ONLY by the
         // creditReferralOnProfileComplete Cloud Function via the Admin SDK,
         // which bypasses rules. If clients could write it, anyone could
