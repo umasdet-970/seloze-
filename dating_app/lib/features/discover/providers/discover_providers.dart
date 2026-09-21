@@ -13,6 +13,7 @@ import '../../analytics/providers/analytics_providers.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../notifications/providers/notification_providers.dart';
 import '../../onboarding/providers/onboarding_providers.dart';
+import '../../referrals/providers/referral_providers.dart';
 import '../../subscription/providers/subscription_providers.dart';
 
 final profileRepositoryProvider = Provider<ProfileRepository>((ref) {
@@ -82,6 +83,13 @@ class DiscoverFeedNotifier extends AsyncNotifier<List<Profile>> {
     // isn't fetched (and quota spent) under default filters and then
     // immediately re-fetched once the real ones arrive.
     await ref.watch(datingPreferencesProvider.future);
+    // Same for the invite bonus: without this the first load would use the
+    // plain 10/day limit and only pick up the earned bonus on the next
+    // refresh. A failed read just means "no bonus yet".
+    try {
+      await ref.watch(referralCountProvider.future);
+    } catch (_) {}
+    ref.watch(dailyDiscoveryLimitProvider);
     // Re-run whenever the tab or filters change, so Search & Filters
     // actually affects the feed instead of just the chip UI state.
     ref.watch(discoverTabProvider);

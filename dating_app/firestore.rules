@@ -49,7 +49,12 @@ service cloud.firestore {
       match /private/{docId} {
         // Preferences, settings, and the daily discovery quota are never
         // shown to other users.
-        allow read, write: if isOwner(uid);
+        allow read: if isOwner(uid);
+        // `rewards` (invite-a-friend referralCount) is written ONLY by the
+        // creditReferralOnProfileComplete Cloud Function via the Admin SDK,
+        // which bypasses rules. If clients could write it, anyone could
+        // grant themselves the maximum discovery bonus.
+        allow write: if isOwner(uid) && docId != 'rewards';
       }
 
       match /swipes/{targetId} {
@@ -121,6 +126,28 @@ service cloud.firestore {
       allow create: if signedIn() && request.resource.data.reporterId == request.auth.uid;
       allow read, update: if isAdmin();
       allow delete: if false;
+    }
+
+    match /reengagement/{uid} {
+      // Bookkeeping for the daily re-engagement push (who was pushed or held
+      // out, and whether they came back) — written only by the
+      // sendReengagementPush Cloud Function. Admin-readable for analysis.
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /reengagementSummary/{docId} {
+      // Pushed-vs-held-out comparison, refreshed by the same function.
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /referrals/{inviteeId} {
+      // One doc per invited friend (id = the friend's uid), written only by
+      // the creditReferralOnProfileComplete Cloud Function. Doubles as the
+      // "already credited" marker and as data for the admin dashboard.
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
     match /analyticsFunnel/{uid} {

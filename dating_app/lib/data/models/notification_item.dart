@@ -15,6 +15,7 @@ enum NotificationType {
   subscriptionExpiration,
   securityAlert,
   promotional,
+  referralReward,
 }
 
 extension NotificationTypeMeta on NotificationType {
@@ -30,6 +31,7 @@ extension NotificationTypeMeta on NotificationType {
           Icons.workspace_premium,
         NotificationType.securityAlert => Icons.shield,
         NotificationType.promotional => Icons.campaign,
+        NotificationType.referralReward => Icons.group_add,
       };
 
   /// Route to open when tapped, if any.
@@ -37,7 +39,7 @@ extension NotificationTypeMeta on NotificationType {
         NotificationType.newLike => '/likes',
         NotificationType.mutualMatch => '/matches',
         NotificationType.newMessage => '/chat',
-        NotificationType.profileVerification => '/profile',
+        NotificationType.profileVerification || NotificationType.referralReward => '/profile',
         NotificationType.subscriptionPurchase ||
         NotificationType.subscriptionRenewal ||
         NotificationType.subscriptionExpiration =>

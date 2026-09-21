@@ -7,6 +7,8 @@ admin.initializeApp();
 
 export { moderateImage, moderateText } from "./moderation";
 export { revenueCatWebhook } from "./revenuecat_webhook";
+export { creditReferralOnProfileComplete } from "./referrals";
+export { sendReengagementPush } from "./reengagement";
 
 /**
  * Push delivery (spec section 13). The mobile app's PushNotificationService
@@ -38,7 +40,7 @@ export const sendPushOnNotificationCreate = onDocumentCreated(
       return;
     }
 
-    const title = (notification?.title as string | undefined) ?? "Connect";
+    const title = (notification?.title as string | undefined) ?? "Seloze";
     const body = (notification?.body as string | undefined) ?? "";
 
     const response = await admin.messaging().sendEachForMulticast({

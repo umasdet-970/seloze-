@@ -4,6 +4,7 @@ import '../../../data/models/subscription_models.dart';
 import '../../../data/repositories/billing_repository.dart';
 import '../../../data/repositories/firebase/revenuecat_billing_repository.dart';
 import '../../discover/providers/discover_providers.dart';
+import '../../referrals/providers/referral_providers.dart';
 
 final billingRepositoryProvider = Provider<BillingRepository>((ref) {
   return kUseRevenueCat ? RevenueCatBillingRepository() : MockBillingRepository();
@@ -44,7 +45,9 @@ final chatUnlockedProvider = Provider<bool>((ref) {
 /// Free vs Premium gating (spec section 4: 10 vs 50 discoveries/day).
 final dailyDiscoveryLimitProvider = Provider<int>((ref) {
   final tier = ref.watch(subscriptionTierProvider);
-  return tier == SubscriptionTier.premium ? 50 : 10;
+  final base = tier == SubscriptionTier.premium ? 50 : 10;
+  // Invite-a-friend bonus (see referral_providers.dart) on top of the plan.
+  return base + ref.watch(referralBonusProvider);
 });
 
 /// (used, limit) for today — drives the "X of Y discoveries left" UI and

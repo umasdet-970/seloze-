@@ -80,6 +80,7 @@ dependencies:
   # onMessage doesn't show anything on its own while the app is open —
   # this shows an actual heads-up local notification for it.
   flutter_local_notifications: ^18.0.1
+  share_plus: ^13.3.0
 
   # Acquisition source (spec section 17), Android only — real Google
   # Play Install Referrer data (a first-party Play Store capability,

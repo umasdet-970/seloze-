@@ -76,13 +76,18 @@ class FirebaseAuthRepository implements AuthRepository {
       // `_ensureUserDoc` already only reaches this branch that one time
       // (guarded by `!snap.exists` above), which is exactly the right
       // hook. Never throws — see AcquisitionSourceService's doc comment.
-      final acquisitionSource = await AcquisitionSourceService().captureSource();
+      final attribution = await AcquisitionSourceService().captureAttribution();
 
       await ref.set({
         'createdAt': FieldValue.serverTimestamp(),
         'ageVerified': false,
         'accountStatus': 'active',
-        'acquisitionSource': acquisitionSource,
+        'acquisitionSource': attribution.source,
+        // Set when the install came from a friend's invite link; the
+        // creditReferralOnProfileComplete Cloud Function rewards them once
+        // this user completes their profile (never for self-invites).
+        if (attribution.inviterUid != null && attribution.inviterUid != user.uid)
+          'invitedBy': attribution.inviterUid,
         // Mirrored from Firebase Auth (not read from there directly) so
         // the admin dashboard — a plain Firestore client with no Admin
         // SDK access to Auth records — has something to display/search.

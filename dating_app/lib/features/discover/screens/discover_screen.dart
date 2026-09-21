@@ -4,6 +4,7 @@ import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/config/ad_config.dart';
+import '../../../core/config/referral_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/profile.dart';
 import '../../../data/models/subscription_models.dart';
@@ -11,6 +12,7 @@ import '../../../shared/widgets/ad_banner.dart';
 import '../../../shared/widgets/report_sheet.dart';
 import '../../../shared/widgets/shimmer_placeholders.dart';
 import '../../notifications/providers/notification_providers.dart';
+import '../../referrals/widgets/invite_friends_card.dart';
 import '../../subscription/providers/subscription_providers.dart';
 import '../providers/discover_providers.dart';
 import '../widgets/action_buttons.dart';
@@ -55,6 +57,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
                     limitReached: limitReached,
                     onRefresh: () => ref.read(discoverFeedProvider.notifier).refresh(),
                     onUpgrade: () => context.push('/paywall'),
+                    onInvite: () => shareInvite(ref),
                   );
                 }
                 return Padding(
@@ -319,7 +322,13 @@ class _EmptyState extends StatelessWidget {
   final bool limitReached;
   final VoidCallback onRefresh;
   final VoidCallback onUpgrade;
-  const _EmptyState({required this.limitReached, required this.onRefresh, required this.onUpgrade});
+  final VoidCallback onInvite;
+  const _EmptyState({
+    required this.limitReached,
+    required this.onRefresh,
+    required this.onUpgrade,
+    required this.onInvite,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -340,16 +349,18 @@ class _EmptyState extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               limitReached
-                  ? 'Upgrade to Premium for 50 discoveries a day, or come back tomorrow.'
+                  ? 'Come back tomorrow, or invite friends to earn more discoveries every day.'
                   : 'Check back later for new profiles.',
               style: TextStyle(color: onSurfaceVariant),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
             FilledButton(
-              onPressed: limitReached ? onUpgrade : onRefresh,
-              child: Text(limitReached ? 'Upgrade to Premium' : 'Refresh'),
+              onPressed: limitReached ? onInvite : onRefresh,
+              child: Text(limitReached ? 'Invite friends (+$kBonusDiscoveriesPerFriend a day each)' : 'Refresh'),
             ),
+            if (limitReached)
+              TextButton(onPressed: onUpgrade, child: const Text('See Premium')),
           ],
         ),
       ),

@@ -42,10 +42,40 @@ class AcquisitionSourceService {
     'instagram': 'Meta Ads',
     'fb': 'Meta Ads',
     'youtube': 'YouTube',
+    // Our own "Invite friends" links (see core/config/referral_config.dart).
+    'invite': 'Friend invite',
   };
 
-  Future<String> captureSource() async {
-    if (!Platform.isAndroid) return 'Organic/Direct';
+  /// Firebase uids are plain alphanumerics; anything else in an invite link
+  /// is malformed (or hostile) and is ignored rather than stored.
+  static final _uidPattern = RegExp(r'^[A-Za-z0-9]{6,128}$');
+
+  /// Pure parser for the Play install-referrer string (unit-tested).
+  static InstallAttribution parseReferrer(String? referrer) {
+    const organic = InstallAttribution('Organic/Direct');
+    if (referrer == null || referrer.isEmpty) return organic;
+
+    final Map<String, String> params;
+    try {
+      params = Uri.splitQueryString(referrer);
+    } catch (_) {
+      return organic;
+    }
+    final source = params['utm_source']?.toLowerCase().trim();
+    if (source == null || source.isEmpty) return organic;
+
+    final channel = _channelBySource[source] ?? 'Organic/Direct';
+    if (source == 'invite') {
+      final inviter = params['utm_content']?.trim();
+      final valid = inviter != null && _uidPattern.hasMatch(inviter);
+      return InstallAttribution(channel, inviterUid: valid ? inviter : null);
+    }
+    return InstallAttribution(channel);
+  }
+
+  /// Channel + (for invite links) who invited this install.
+  Future<InstallAttribution> captureAttribution() async {
+    if (!Platform.isAndroid) return const InstallAttribution('Organic/Direct');
 
     try {
       // The native side always resolves (never throws) — a timeout here
@@ -55,19 +85,25 @@ class AcquisitionSourceService {
       final referrer = await _installReferrerChannel
           .invokeMethod<String>('getInstallReferrer')
           .timeout(const Duration(seconds: 5), onTimeout: () => null);
-      if (referrer == null || referrer.isEmpty) return 'Organic/Direct';
-
-      final params = Uri.splitQueryString(referrer);
-      final source = params['utm_source']?.toLowerCase().trim();
-      if (source == null || source.isEmpty) return 'Organic/Direct';
-
-      return _channelBySource[source] ?? 'Organic/Direct';
+      return parseReferrer(referrer);
     } catch (_) {
       // Play Install Referrer API unavailable (no Play Services, an
       // emulator without the Play Store, a very old device, etc.) — an
       // unknown acquisition source is exactly 'Organic/Direct', not an
       // error worth surfacing anywhere.
-      return 'Organic/Direct';
+      return const InstallAttribution('Organic/Direct');
     }
   }
+
+  Future<String> captureSource() async => (await captureAttribution()).source;
+}
+
+class InstallAttribution {
+  const InstallAttribution(this.source, {this.inviterUid});
+
+  /// Acquisition channel shown in the admin dashboard.
+  final String source;
+
+  /// The uid of the user whose invite link this install came from, if any.
+  final String? inviterUid;
 }

@@ -36,7 +36,7 @@ class NotificationSettingsScreen extends ConsumerWidget {
           ),
           SwitchListTile(
             title: const Text('Promotional'),
-            subtitle: const Text('Tips, offers, and product news'),
+            subtitle: const Text('Reminders, tips, and product news'),
             value: prefs.promotional,
             onChanged: (v) => repo.saveNotificationPreferences(uid, prefs.copyWith(promotional: v)),
           ),

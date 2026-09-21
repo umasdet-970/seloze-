@@ -14,6 +14,7 @@ import '../../auth/providers/auth_providers.dart';
 import '../../discover/providers/discover_providers.dart';
 import '../../notifications/providers/notification_providers.dart';
 import '../../onboarding/providers/onboarding_providers.dart';
+import '../../referrals/widgets/invite_friends_card.dart';
 import '../../subscription/providers/subscription_providers.dart';
 
 class ProfileScreen extends ConsumerWidget {
@@ -68,6 +69,8 @@ class ProfileScreen extends ConsumerWidget {
           _VerificationCard(isVerified: profile?.isVerified ?? false),
           const SizedBox(height: 16),
           const _SubscriptionCard(),
+          const SizedBox(height: 16),
+          const InviteFriendsCard(),
         ],
       ),
     );
