@@ -17,6 +17,7 @@ import '../../auth/providers/auth_providers.dart';
 import '../../discover/providers/discover_providers.dart';
 import '../../safety/providers/moderation_providers.dart';
 import '../providers/onboarding_providers.dart';
+import '../widgets/location_consent_tile.dart';
 
 const _genderOptions = ['Woman', 'Man', 'Non-binary', 'Other'];
 
@@ -51,6 +52,11 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
   RangeValues _ageRange = const RangeValues(18, 45);
   double _maxDistance = 50;
   bool _visible = true;
+
+  // Location is opt-in (Google Play: an in-app disclosure plus an
+  // affirmative tap before the OS permission prompt), so it starts off.
+  bool _shareLocation = false;
+  bool _hadSavedLocation = false;
 
   bool _saving = false;
   bool _uploadingPhoto = false;
@@ -100,6 +106,10 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
         _ageRange = RangeValues(preferences.minAge.toDouble(), preferences.maxAge.toDouble());
         _maxDistance = preferences.maxDistanceKm;
         _visible = preferences.profileVisible;
+        if (kUseFirebase) {
+          _hadSavedLocation = await LocationService().hasSavedLocation(uid);
+          _shareLocation = _hadSavedLocation;
+        }
       }
 
       if (mounted) {
@@ -239,7 +249,15 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
       // finishing onboarding, and LocationService already never throws
       // (permission denied / location off / any failure just means no
       // location gets saved, not an error surfaced here).
-      if (kUseFirebase) unawaited(LocationService().captureAndSaveLocation(uid));
+      if (kUseFirebase) {
+        final location = LocationService();
+        if (_shareLocation) {
+          unawaited(location.captureAndSaveLocation(uid));
+        } else if (_hadSavedLocation) {
+          // They switched it off — stop keeping the location we had.
+          unawaited(location.clearSavedLocation(uid));
+        }
+      }
       // Onboarding: router redirect takes it from here (-> /discover).
       // Editing: profile was already complete, so redirect won't fire —
       // just return to wherever Edit Profile was opened from.
@@ -656,7 +674,12 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 8),
+          LocationConsentTile(
+            value: _shareLocation,
+            onChanged: (v) => setState(() => _shareLocation = v),
+          ),
+          const SizedBox(height: 12),
           const Text('Dating intention', style: TextStyle(fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
           Wrap(
@@ -684,6 +707,11 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
           ),
           const SizedBox(height: 20),
           const Text('Show me', style: TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 4),
+          const Text(
+            'Only used to filter who you see. It is private and never shown on your profile.',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+          ),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,

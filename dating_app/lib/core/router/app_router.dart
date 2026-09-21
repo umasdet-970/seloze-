@@ -36,7 +36,7 @@ const _tabRoutes = ['/discover', '/likes', '/matches', '/chat', '/profile'];
 
 /// Accessible regardless of auth state — you should be able to read the
 /// Terms/Privacy Policy before creating an account, not just after.
-const _publicRoutes = ['/legal/terms', '/legal/privacy'];
+const _publicRoutes = ['/legal/terms', '/legal/privacy', '/legal/guidelines'];
 
 /// Router is a provider (not a top-level const) so its `redirect` can read
 /// live auth/profile state and `refreshListenable` can react to
@@ -96,6 +96,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/legal/privacy',
         builder: (context, state) => const LegalDocumentScreen(title: 'Privacy Policy', content: kPrivacyPolicyText),
+      ),
+      GoRoute(
+        path: '/legal/guidelines',
+        builder: (context, state) => const LegalDocumentScreen(title: 'Community Guidelines', content: kGuidelinesText),
       ),
       GoRoute(
         path: '/chat/:id',

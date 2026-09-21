@@ -26,6 +26,7 @@ class SettingsScreen extends ConsumerWidget {
           const Divider(height: 32),
           _tile(context, icon: Icons.description_outlined, label: 'Terms & Conditions', onTap: () => context.push('/legal/terms')),
           _tile(context, icon: Icons.privacy_tip_outlined, label: 'Privacy Policy', onTap: () => context.push('/legal/privacy')),
+          _tile(context, icon: Icons.shield_outlined, label: 'Community Guidelines', onTap: () => context.push('/legal/guidelines')),
           const Divider(height: 32),
           _tile(
             context,

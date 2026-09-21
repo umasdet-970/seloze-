@@ -138,6 +138,20 @@ export const cleanupUserOnDelete = functionsV1.auth.user().onDelete(async (user)
     await step(`subcollection ${name}`, () => deleteCollection(userRef.collection(name), 200));
   }
 
+  // Chat conversations the user took part in, with all their messages
+  // (`conversations/{id}` carries a `participants` array). They were left
+  // behind before, so "delete my account" did not delete what people had
+  // written. The other person already stops seeing the conversation once
+  // the match doc is gone (see the doc comment above), so removing the
+  // whole thing loses them nothing they could still open.
+  await step("conversations", async () => {
+    const db = admin.firestore();
+    const convos = await db.collection("conversations").where("participants", "array-contains", uid).get();
+    for (const convo of convos.docs) {
+      await db.recursiveDelete(convo.ref);
+    }
+  });
+
   // The root doc itself, in case deleteAccount()'s client-side delete
   // didn't run (e.g. the auth user was removed directly from the
   // console, or the client delete failed after the auth delete

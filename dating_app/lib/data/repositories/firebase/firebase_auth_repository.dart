@@ -212,7 +212,7 @@ class FirebaseAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<void> setAgeVerified(DateTime dateOfBirth) async {
+  Future<void> setAgeVerified(DateTime dateOfBirth, {String? termsVersion}) async {
     final user = _auth.currentUser;
     if (user == null) throw AuthException('No signed-in user.');
 
@@ -228,6 +228,10 @@ class FirebaseAuthRepository implements AuthRepository {
     await _firestore.collection('users').doc(user.uid).set({
       'ageVerified': true,
       'dateOfBirth': Timestamp.fromDate(dateOfBirth),
+      if (termsVersion != null) ...{
+        'termsAcceptedAt': FieldValue.serverTimestamp(),
+        'termsVersion': termsVersion,
+      },
     }, SetOptions(merge: true));
   }
 

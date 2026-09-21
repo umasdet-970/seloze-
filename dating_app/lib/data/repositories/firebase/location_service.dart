@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
+import '../../../core/utils/geo_distance.dart';
 
 /// Captures the device's approximate location and stores it on
 /// `users/{uid}` as `{lat, lng}` — real geo-distance in Discover (spec
@@ -13,6 +14,30 @@ class LocationService {
   LocationService({FirebaseFirestore? firestore}) : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
+
+  /// Whether a location is currently saved for [uid] — used to pre-tick the
+  /// "Use my approximate location" box when someone edits their profile.
+  Future<bool> hasSavedLocation(String uid) async {
+    if (uid.isEmpty) return false;
+    try {
+      final data = (await _firestore.collection('users').doc(uid).get()).data();
+      return data?['lat'] != null && data?['lng'] != null;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Removes the saved location, for when someone switches "Use my
+  /// approximate location" off. Never throws.
+  Future<void> clearSavedLocation(String uid) async {
+    if (uid.isEmpty) return;
+    try {
+      await _firestore.collection('users').doc(uid).update({
+        'lat': FieldValue.delete(),
+        'lng': FieldValue.delete(),
+      });
+    } catch (_) {}
+  }
 
   /// Returns true if a location was captured and saved, false if not
   /// (permission denied, location services off, or any other failure) —
@@ -45,8 +70,9 @@ class LocationService {
       );
 
       await _firestore.collection('users').doc(uid).set({
-        'lat': position.latitude,
-        'lng': position.longitude,
+        // Rounded to ~1 km before storing (see roundCoordinate).
+        'lat': roundCoordinate(position.latitude),
+        'lng': roundCoordinate(position.longitude),
       }, SetOptions(merge: true));
       return true;
     } catch (_) {

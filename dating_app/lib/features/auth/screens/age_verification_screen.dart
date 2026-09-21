@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../../core/constants/legal_content.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../analytics/providers/analytics_providers.dart';
 import '../providers/auth_providers.dart';
@@ -16,6 +18,7 @@ class AgeVerificationScreen extends ConsumerStatefulWidget {
 
 class _AgeVerificationScreenState extends ConsumerState<AgeVerificationScreen> {
   DateTime? _dateOfBirth;
+  bool _acceptedTerms = false;
   bool _loading = false;
   String? _error;
 
@@ -42,12 +45,19 @@ class _AgeVerificationScreenState extends ConsumerState<AgeVerificationScreen> {
       setState(() => _error = 'Select your date of birth');
       return;
     }
+    // Every sign-up path (email, Google, phone) passes through this screen
+    // exactly once, so this is where the Terms are accepted — Google Play
+    // requires acceptance before anyone can create or upload content.
+    if (!_acceptedTerms) {
+      setState(() => _error = 'Please accept the Terms, Privacy Policy and Community Guidelines to continue');
+      return;
+    }
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      await ref.read(authRepositoryProvider).setAgeVerified(_dateOfBirth!);
+      await ref.read(authRepositoryProvider).setAgeVerified(_dateOfBirth!, termsVersion: kTermsVersion);
       ref.read(analyticsRepositoryProvider).logEvent('age_verified');
       // Router redirect takes it from here (-> /discover).
     } catch (e) {
@@ -91,7 +101,36 @@ class _AgeVerificationScreenState extends ConsumerState<AgeVerificationScreen> {
                 const SizedBox(height: 8),
                 Text(_error!, style: const TextStyle(color: Colors.red)),
               ],
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Checkbox(
+                    value: _acceptedTerms,
+                    onChanged: (v) => setState(() {
+                      _acceptedTerms = v ?? false;
+                      _error = null;
+                    }),
+                  ),
+                  const Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(top: 12),
+                      child: Wrap(
+                        children: [
+                          Text('I am 18 or over and I agree to the ', style: TextStyle(fontSize: 13)),
+                          _LegalLink(label: 'Terms & Conditions', route: '/legal/terms'),
+                          Text(', ', style: TextStyle(fontSize: 13)),
+                          _LegalLink(label: 'Privacy Policy', route: '/legal/privacy'),
+                          Text(' and ', style: TextStyle(fontSize: 13)),
+                          _LegalLink(label: 'Community Guidelines', route: '/legal/guidelines'),
+                          Text('.', style: TextStyle(fontSize: 13)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
               FilledButton(
                 onPressed: _loading ? null : _confirm,
                 child: _loading
@@ -105,6 +144,24 @@ class _AgeVerificationScreenState extends ConsumerState<AgeVerificationScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _LegalLink extends StatelessWidget {
+  const _LegalLink({required this.label, required this.route});
+
+  final String label;
+  final String route;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => context.push(route),
+      child: Text(
+        label,
+        style: const TextStyle(fontSize: 13, color: AppColors.primary, decoration: TextDecoration.underline),
       ),
     );
   }

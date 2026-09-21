@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 
-/// Renders a Privacy Policy / Terms document (spec section 26). Content
-/// uses '## ' as a section-heading marker; everything else is body text.
+/// Renders a Privacy Policy / Terms / Community Guidelines document. Content
+/// uses '## ' as a section-heading marker and '- ' for bullet points;
+/// everything else is body text. A heading may sit on the line directly above
+/// its body text (no blank line between them), so the document is read line by
+/// line rather than split on blank lines.
 class LegalDocumentScreen extends StatelessWidget {
   final String title;
   final String content;
@@ -11,42 +14,55 @@ class LegalDocumentScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final blocks = content.trim().split('\n\n');
-
     return Scaffold(
       appBar: AppBar(title: Text(title)),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
-            for (final block in blocks) _buildBlock(block.trim()),
+            ..._buildWidgets(content),
             const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(12)),
-              child: const Text(
-                'This is a draft prepared for the app scaffold — have it reviewed by a '
-                'qualified lawyer for your launch jurisdictions before publishing.',
-                style: TextStyle(fontSize: 11, color: AppColors.textMuted),
-              ),
-            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildBlock(String block) {
-    if (block.isEmpty) return const SizedBox.shrink();
-    if (block.startsWith('## ')) {
-      return Padding(
-        padding: const EdgeInsets.only(top: 20, bottom: 8),
-        child: Text(block.substring(3), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+  static List<Widget> _buildWidgets(String content) {
+    final widgets = <Widget>[];
+    final paragraph = <String>[];
+
+    void flush() {
+      if (paragraph.isEmpty) return;
+      widgets.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            paragraph.join('\n'),
+            style: const TextStyle(fontSize: 13, height: 1.5, color: AppColors.textDark),
+          ),
+        ),
       );
+      paragraph.clear();
     }
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Text(block, style: const TextStyle(fontSize: 13, height: 1.5, color: AppColors.textDark)),
-    );
+
+    for (final raw in content.trim().split('\n')) {
+      final line = raw.trimRight();
+      if (line.startsWith('## ')) {
+        flush();
+        widgets.add(
+          Padding(
+            padding: const EdgeInsets.only(top: 20, bottom: 8),
+            child: Text(line.substring(3), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ),
+        );
+      } else if (line.isEmpty) {
+        flush();
+      } else {
+        paragraph.add(line.startsWith('- ') ? '•  ${line.substring(2)}' : line);
+      }
+    }
+    flush();
+    return widgets;
   }
 }

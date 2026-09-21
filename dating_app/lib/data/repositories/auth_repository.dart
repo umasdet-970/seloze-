@@ -24,7 +24,10 @@ abstract class AuthRepository {
 
   /// Records date of birth and marks the current user as age-verified.
   /// Throws [AuthException] if under 18 (spec section 1: age verification).
-  Future<void> setAgeVerified(DateTime dateOfBirth);
+  /// [termsVersion] is the version of the Terms / Community Guidelines the user
+  /// just accepted; it is stored with a timestamp (Play requires that users
+  /// accept the terms before they can create content).
+  Future<void> setAgeVerified(DateTime dateOfBirth, {String? termsVersion});
 
   Future<void> signOut();
 
@@ -154,7 +157,7 @@ class MockAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<void> setAgeVerified(DateTime dateOfBirth) async {
+  Future<void> setAgeVerified(DateTime dateOfBirth, {String? termsVersion}) async {
     await _delay();
     final user = _currentUser;
     if (user == null) throw AuthException('No signed-in user.');
