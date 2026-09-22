@@ -2,12 +2,14 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/config/wallet_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/geo_distance.dart';
 import '../../../data/models/notification_item.dart';
 import '../../../data/models/profile.dart';
 import '../../likes/providers/likes_providers.dart';
 import '../../notifications/providers/notification_providers.dart';
+import '../../wallet/providers/wallet_providers.dart';
 import '../providers/discover_providers.dart';
 
 /// Opened by the (i) button on a Discover card: the full profile (all
@@ -40,12 +42,19 @@ class _ProfileDetails extends ConsumerStatefulWidget {
 class _ProfileDetailsState extends ConsumerState<_ProfileDetails> {
   bool _sendingRose = false;
 
-  Future<void> _sendRose() async {
+  Future<void> _sendRose({bool spendCoins = false}) async {
     setState(() => _sendingRose = true);
     HapticFeedback.mediumImpact();
     try {
       final uid = ref.read(currentUserIdProvider);
       final social = ref.read(socialRepositoryProvider);
+      // Debit before sending (not after) — if the balance is insufficient
+      // this throws and no rose is ever sent. Coin-funded roses don't
+      // touch the daily free quota (rosesLeftTodayProvider) — they're a
+      // separate, unlimited-by-coins supplement to it.
+      if (spendCoins) {
+        await ref.read(walletRepositoryProvider).debit(uid, kRoseCostCoins, reason: 'rose');
+      }
       final result = await social.sendRose(uid, widget.profile.id);
       if (!mounted) return;
       if (result.matched) {
@@ -174,15 +183,29 @@ class _ProfileDetailsState extends ConsumerState<_ProfileDetails> {
         Consumer(
           builder: (context, ref, _) {
             final rosesLeft = ref.watch(rosesLeftTodayProvider);
-            final canSend = rosesLeft > 0 && !_sendingRose;
-            return OutlinedButton.icon(
-              onPressed: canSend ? _sendRose : null,
-              icon: _sendingRose
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.local_florist, color: Colors.pink),
-              label: Text(
-                rosesLeft > 0 ? 'Send a Rose ($rosesLeft left today)' : "You're out of Roses for today",
-              ),
+            final coins = ref.watch(coinBalanceProvider);
+            final canAffordCoins = coins >= kRoseCostCoins;
+            if (rosesLeft > 0) {
+              return OutlinedButton.icon(
+                onPressed: _sendingRose ? null : () => _sendRose(),
+                icon: _sendingRose
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.local_florist, color: Colors.pink),
+                label: Text('Send a Rose ($rosesLeft left today)'),
+              );
+            }
+            if (canAffordCoins) {
+              return OutlinedButton.icon(
+                onPressed: _sendingRose ? null : () => _sendRose(spendCoins: true),
+                icon: _sendingRose
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.local_florist, color: Colors.pink),
+                label: const Text('Send a Rose for $kRoseCostCoins coins'),
+              );
+            }
+            return const OutlinedButton(
+              onPressed: null,
+              child: Text("You're out of Roses for today"),
             );
           },
         ),

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/config/ad_config.dart';
 import '../../../core/config/backend_config.dart';
+import '../../../core/config/wallet_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/notification_item.dart';
 import '../../../data/models/profile.dart';
@@ -16,6 +17,7 @@ import '../../notifications/providers/notification_providers.dart';
 import '../../onboarding/providers/onboarding_providers.dart';
 import '../../referrals/widgets/invite_friends_card.dart';
 import '../../subscription/providers/subscription_providers.dart';
+import '../../wallet/providers/wallet_providers.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -71,6 +73,8 @@ class ProfileScreen extends ConsumerWidget {
           const _SubscriptionCard(),
           const SizedBox(height: 16),
           _BoostCard(profile: profile),
+          const SizedBox(height: 16),
+          const _WalletCard(),
           const SizedBox(height: 16),
           const InviteFriendsCard(),
         ],
@@ -256,11 +260,16 @@ class _BoostCardState extends ConsumerState<_BoostCard> {
   static const _boostDuration = Duration(minutes: 30);
   bool _activating = false;
 
-  Future<void> _activate() async {
+  Future<void> _activate({bool spendCoins = false}) async {
     setState(() => _activating = true);
     HapticFeedback.mediumImpact();
     final uid = ref.read(currentUserIdProvider);
     try {
+      // Debit before activating (not after) — if the balance is
+      // insufficient this throws and no boost is ever granted.
+      if (spendCoins) {
+        await ref.read(walletRepositoryProvider).debit(uid, kBoostCostCoins, reason: 'boost');
+      }
       await ref.read(userProfileRepositoryProvider).activateBoost(uid, duration: _boostDuration);
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -284,6 +293,8 @@ class _BoostCardState extends ConsumerState<_BoostCard> {
     final tier = ref.watch(subscriptionTierProvider);
     final isPremium = tier == SubscriptionTier.premium;
     final isBoosted = widget.profile?.isBoosted ?? false;
+    final coins = ref.watch(coinBalanceProvider);
+    final canAffordCoins = coins >= kBoostCostCoins;
     final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
 
     return Container(
@@ -316,15 +327,117 @@ class _BoostCardState extends ConsumerState<_BoostCard> {
               ],
             ),
           ),
-          if (!isPremium)
-            TextButton(onPressed: () => context.push('/paywall'), child: const Text('Upgrade'))
+          if (_activating)
+            const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
           else if (isBoosted)
             const SizedBox.shrink()
+          else if (isPremium)
+            TextButton(onPressed: () => _activate(), child: const Text('Boost now'))
           else
-            _activating
-                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                : TextButton(onPressed: _activate, child: const Text('Boost now')),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextButton(onPressed: () => context.push('/paywall'), child: const Text('Upgrade')),
+                if (canAffordCoins)
+                  TextButton(
+                    onPressed: () => _activate(spendCoins: true),
+                    child: const Text('$kBoostCostCoins coins', style: TextStyle(fontSize: 11)),
+                  ),
+              ],
+            ),
         ],
+      ),
+    );
+  }
+}
+
+/// Coins/credits economy (spec: Badoo-style Superpowers — see
+/// core/config/wallet_config.dart). Earned via the welcome credit and
+/// invites (kUseRevenueCat is off, so there's no real purchase path yet —
+/// "Get more" explains where coins actually come from right now instead
+/// of pretending a buy flow exists).
+class _WalletCard extends ConsumerWidget {
+  const _WalletCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final coins = ref.watch(coinBalanceProvider);
+    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.monetization_on, color: Colors.amber),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('$coins coins', style: const TextStyle(fontWeight: FontWeight.w600)),
+                Text(
+                  'Spend on Boost ($kBoostCostCoins) or Roses ($kRoseCostCoins) without Premium.',
+                  style: TextStyle(color: onSurfaceVariant, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: () => showModalBottomSheet(
+              context: context,
+              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+              builder: (_) => const _GetMoreCoinsSheet(),
+            ),
+            child: const Text('Get more'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GetMoreCoinsSheet extends StatelessWidget {
+  const _GetMoreCoinsSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SafeArea(
+      child: Padding(
+        padding: EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Get more coins', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            SizedBox(height: 16),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.group_add, color: AppColors.primary),
+              title: Text('Invite friends'),
+              subtitle: Text('+$kCoinsPerReferral coins per friend who joins'),
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.card_giftcard, color: AppColors.primary),
+              title: Text('Welcome bonus'),
+              subtitle: Text('$kWelcomeCoins coins when you completed your profile'),
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.shopping_cart_outlined, color: AppColors.textMuted),
+              title: Text('Buy coins'),
+              subtitle: Text("Coming soon — we'll let you know when it's live"),
+              enabled: false,
+            ),
+            SizedBox(height: 8),
+          ],
+        ),
       ),
     );
   }

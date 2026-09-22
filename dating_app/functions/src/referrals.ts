@@ -21,6 +21,12 @@ import * as logger from "firebase-functions/logger";
  */
 const MAX_REWARDED_FRIENDS = 5;
 const BONUS_PER_FRIEND = 5;
+// Coins economy (spec: Badoo-style Superpowers) — keep in sync with
+// lib/core/config/wallet_config.dart's kCoinsPerReferral. Uncapped, unlike
+// the discovery bonus above: coins are a spend-them-down currency (Boost/
+// Rose), not a standing daily perk, so there's less reason to cap how
+// many a prolific inviter can stock up.
+const COINS_PER_REFERRAL = 30;
 
 export const creditReferralOnProfileComplete = onDocumentUpdated("users/{uid}", async (event) => {
   const before = event.data?.before.data();
@@ -40,6 +46,10 @@ export const creditReferralOnProfileComplete = onDocumentUpdated("users/{uid}", 
   const referralRef = db.collection("referrals").doc(inviteeId);
   const inviterRef = db.collection("users").doc(inviterId);
   const rewardsRef = inviterRef.collection("private").doc("rewards");
+  // Same doc every other client-trust balance in this app lives in (quota,
+  // ad-bonus, rose-count) — see WalletRepository's doc comment for why
+  // this one doesn't need the rewards doc's server-only treatment.
+  const walletRef = inviterRef.collection("private").doc("wallet");
 
   const result = await db.runTransaction(async (tx) => {
     const [existing, inviter, rewards] = await Promise.all([
@@ -60,6 +70,7 @@ export const creditReferralOnProfileComplete = onDocumentUpdated("users/{uid}", 
     // Count every friend who joins (for the progress display); the bonus
     // itself is capped client-side at MAX_REWARDED_FRIENDS.
     tx.set(rewardsRef, { referralCount: admin.firestore.FieldValue.increment(1) }, { merge: true });
+    tx.set(walletRef, { balance: admin.firestore.FieldValue.increment(COINS_PER_REFERRAL) }, { merge: true });
     return { rewarded };
   });
 
@@ -71,8 +82,8 @@ export const creditReferralOnProfileComplete = onDocumentUpdated("users/{uid}", 
     type: "referralReward",
     title: result.rewarded ? "A friend joined Seloze" : "Another friend joined",
     body: result.rewarded
-      ? `You earned +${BONUS_PER_FRIEND} discoveries a day.`
-      : "Thanks for inviting friends — you've already unlocked the maximum bonus.",
+      ? `You earned +${BONUS_PER_FRIEND} discoveries a day and ${COINS_PER_REFERRAL} coins.`
+      : `Thanks for inviting friends — you've already unlocked the maximum discovery bonus, but you still earned ${COINS_PER_REFERRAL} coins.`,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     read: false,
   });

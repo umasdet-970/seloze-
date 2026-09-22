@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/config/backend_config.dart';
+import '../../../core/config/wallet_config.dart';
 import '../../../core/constants/interests.dart';
 import '../../../core/constants/profile_prompts.dart';
 import '../../../core/theme/app_theme.dart';
@@ -17,6 +18,7 @@ import '../../analytics/providers/analytics_providers.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../discover/providers/discover_providers.dart';
 import '../../safety/providers/moderation_providers.dart';
+import '../../wallet/providers/wallet_providers.dart';
 import '../providers/onboarding_providers.dart';
 import '../widgets/location_consent_tile.dart';
 
@@ -275,6 +277,13 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
       ref
           .read(analyticsRepositoryProvider)
           .logEvent(_isEditing ? 'profile_edited' : 'profile_completed');
+      // One-time welcome credit (coins economy — spec: Badoo-style
+      // Superpowers) so a brand-new member has something to spend on
+      // Boost/Rose immediately, before they've earned any via invites.
+      // Guarded by !_isEditing so a later profile edit never re-credits it.
+      if (!_isEditing) {
+        unawaited(ref.read(walletRepositoryProvider).credit(uid, kWelcomeCoins, reason: 'welcome'));
+      }
 
       // Real geo-distance in Discover (spec section 4/15) — best-effort,
       // deliberately not awaited: a slow GPS fix must never delay
