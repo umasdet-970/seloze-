@@ -10,6 +10,12 @@ import '../../chat/providers/chat_providers.dart';
 import '../../discover/providers/discover_providers.dart';
 import '../providers/matches_providers.dart';
 
+/// First-move urgency (spec: Bumble-style — see
+/// functions/src/matchExpiry.ts): how long until this match expires if
+/// neither side has said anything yet. Null once it's already expired-ish
+/// (shouldn't normally be seen — the sweep runs hourly) or has messages.
+const _matchExpiryHours = 24;
+
 /// Matches screen (spec section 6): mutual matches with Unmatch / Block /
 /// Report per match. Tapping opens Chat (built in the next roadmap phase).
 class MatchesScreen extends ConsumerWidget {
@@ -44,16 +50,14 @@ class MatchesScreen extends ConsumerWidget {
                     itemBuilder: (context, index) {
                       final match = matches[index];
                       final profile = match.profile;
+                      final uid = ref.read(currentUserIdProvider);
+                      final conversationId = ref.read(chatRepositoryProvider).conversationId(uid, profile.id);
                       return Material(
                         color: Theme.of(context).colorScheme.surface,
                         borderRadius: BorderRadius.circular(18),
                         child: InkWell(
                           borderRadius: BorderRadius.circular(18),
-                          onTap: () {
-                            final uid = ref.read(currentUserIdProvider);
-                            final conversationId = ref.read(chatRepositoryProvider).conversationId(uid, profile.id);
-                            context.push('/chat/$conversationId', extra: profile);
-                          },
+                          onTap: () => context.push('/chat/$conversationId', extra: profile),
                           child: Padding(
                             padding: const EdgeInsets.all(12),
                             child: Row(
@@ -89,6 +93,21 @@ class MatchesScreen extends ConsumerWidget {
                                       const SizedBox(height: 2),
                                       Text('Matched ${_relativeTime(match.matchedAt)}',
                                           style: TextStyle(color: onSurfaceVariant, fontSize: 12)),
+                                      Consumer(
+                                        builder: (context, ref, _) {
+                                          final hasMessages = ref.watch(chatMessagesProvider(conversationId)).isNotEmpty;
+                                          final hoursLeft = _matchExpiryHours -
+                                              DateTime.now().difference(match.matchedAt).inHours;
+                                          if (hasMessages || hoursLeft <= 0) return const SizedBox.shrink();
+                                          return Padding(
+                                            padding: const EdgeInsets.only(top: 2),
+                                            child: Text(
+                                              'Say hi within ${hoursLeft}h or this match expires',
+                                              style: const TextStyle(color: Colors.orange, fontSize: 11, fontWeight: FontWeight.w600),
+                                            ),
+                                          );
+                                        },
+                                      ),
                                     ],
                                   ),
                                 ),

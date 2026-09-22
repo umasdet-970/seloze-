@@ -17,6 +17,7 @@ enum NotificationType {
   promotional,
   referralReward,
   roseReceived,
+  matchExpired,
 }
 
 extension NotificationTypeMeta on NotificationType {
@@ -34,6 +35,7 @@ extension NotificationTypeMeta on NotificationType {
         NotificationType.promotional => Icons.campaign,
         NotificationType.referralReward => Icons.group_add,
         NotificationType.roseReceived => Icons.local_florist,
+        NotificationType.matchExpired => Icons.hourglass_bottom,
       };
 
   /// Route to open when tapped, if any.

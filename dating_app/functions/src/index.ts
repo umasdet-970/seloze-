@@ -9,6 +9,7 @@ export { moderateImage, moderateText } from "./moderation";
 export { revenueCatWebhook } from "./revenuecat_webhook";
 export { creditReferralOnProfileComplete } from "./referrals";
 export { sendReengagementPush } from "./reengagement";
+export { expireStaleMatches } from "./matchExpiry";
 
 /**
  * Push delivery (spec section 13). The mobile app's PushNotificationService
