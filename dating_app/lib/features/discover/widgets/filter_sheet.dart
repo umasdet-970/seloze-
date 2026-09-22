@@ -31,6 +31,7 @@ class _FilterSheetContentState extends ConsumerState<_FilterSheetContent> {
   late final TextEditingController _searchController;
   late final TextEditingController _professionController;
   late final TextEditingController _educationController;
+  late final TextEditingController _passportController;
 
   @override
   void initState() {
@@ -39,6 +40,7 @@ class _FilterSheetContentState extends ConsumerState<_FilterSheetContent> {
     _searchController = TextEditingController(text: _draft.searchQuery);
     _professionController = TextEditingController(text: _draft.profession);
     _educationController = TextEditingController(text: _draft.education);
+    _passportController = TextEditingController(text: ref.read(passportLocationProvider) ?? '');
   }
 
   @override
@@ -46,6 +48,7 @@ class _FilterSheetContentState extends ConsumerState<_FilterSheetContent> {
     _searchController.dispose();
     _professionController.dispose();
     _educationController.dispose();
+    _passportController.dispose();
     super.dispose();
   }
 
@@ -55,6 +58,8 @@ class _FilterSheetContentState extends ConsumerState<_FilterSheetContent> {
       profession: _professionController.text.trim(),
       education: _educationController.text.trim(),
     );
+    final passport = _passportController.text.trim();
+    ref.read(passportLocationProvider.notifier).state = passport.isEmpty ? null : passport;
     Navigator.pop(context);
   }
 
@@ -64,6 +69,7 @@ class _FilterSheetContentState extends ConsumerState<_FilterSheetContent> {
       _searchController.clear();
       _professionController.clear();
       _educationController.clear();
+      _passportController.clear();
     });
   }
 
@@ -156,13 +162,30 @@ class _FilterSheetContentState extends ConsumerState<_FilterSheetContent> {
                           Navigator.pop(context);
                           context.push('/paywall');
                         })
-                      else
+                      else ...[
                         _PremiumFiltersFields(
                           draft: _draft,
                           professionController: _professionController,
                           educationController: _educationController,
                           onChanged: (d) => setState(() => _draft = d),
                         ),
+                        const SizedBox(height: 16),
+                        const Text('Passport', style: TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Browse a city or country other than your own. Leave blank to use your real location.',
+                          style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _passportController,
+                          decoration: const InputDecoration(
+                            hintText: 'e.g. Mumbai, or Japan',
+                            prefixIcon: Icon(Icons.flight_takeoff),
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 24),
                     ],
                   ),

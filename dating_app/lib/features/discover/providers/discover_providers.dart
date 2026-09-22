@@ -42,6 +42,15 @@ enum DiscoverViewMode { swipe, grid }
 
 final discoverViewModeProvider = StateProvider<DiscoverViewMode>((ref) => DiscoverViewMode.swipe);
 
+/// Premium's "Passport" — browse a city/country other than your own. Null
+/// means "use my real location" (normal). Session-only (not persisted):
+/// this is a temporary preview, not a saved preference, same as how real
+/// apps treat it. Discover has no real geo-radius query (see
+/// FirestoreProfileRepository's doc comment on that), so this filters the
+/// already-fetched batch by Profile.city/country text instead of actually
+/// re-querying by location.
+final passportLocationProvider = StateProvider<String?>((ref) => null);
+
 /// The signed-in user's saved dating preferences (age range, distance,
 /// "show me" — set in onboarding / Edit profile). Null until loaded, or if
 /// they can't be fetched — callers fall back to the built-in defaults.
@@ -101,6 +110,7 @@ class DiscoverFeedNotifier extends AsyncNotifier<List<Profile>> {
     // actually affects the feed instead of just the chip UI state.
     ref.watch(discoverTabProvider);
     ref.watch(discoverFiltersProvider);
+    ref.watch(passportLocationProvider);
     return _loadBatch();
   }
 
@@ -116,8 +126,14 @@ class DiscoverFeedNotifier extends AsyncNotifier<List<Profile>> {
     final candidates = await profileRepo.fetchDiscoverFeed(currentUserId: uid);
     final excluded = {...social.swipedIds(uid), ...social.blockedIds(uid), ...social.reportedIds(uid)};
     var eligible = candidates.where((p) => !excluded.contains(p.id)).toList();
+    eligible = excludeIncognito(eligible, receivedFrom: social.receivedLikeIds(uid).toSet());
+    eligible = applyPassportFilter(eligible, ref.read(passportLocationProvider));
     eligible = _applyFilters(eligible, filters, tier);
     eligible = _applyTab(eligible, tab);
+    // Only for the default "For You" ordering — Nearby/New/Online each
+    // have their own explicit sort the user picked, which boosting
+    // shouldn't override.
+    if (tab == DiscoverTab.forYou) eligible = sortBoostedFirst(eligible);
 
     // Profiles already counted today stay visible for free (re-filtering
     // must never burn extra quota); only genuinely new ones consume it.
@@ -191,6 +207,30 @@ class DiscoverFeedNotifier extends AsyncNotifier<List<Profile>> {
     state = AsyncData(current.where((p) => p.id != id).toList());
   }
 
+  // Rewind (Premium perk — see ActionButtons/DiscoverScreen): the single
+  // most recent like/pass, cleared once used or once it can no longer be
+  // undone (a match). Deliberately just the last one, not a stack — real
+  // apps' "Rewind" is a one-step undo too, not full history.
+  Profile? _lastSwiped;
+  bool _lastSwipeWasMatch = false;
+
+  bool get canRewind => _lastSwiped != null && !_lastSwipeWasMatch;
+
+  /// Undoes the most recent like/pass, if there is one and it didn't
+  /// result in a match (see [canRewind]). Returns false (no-op) otherwise.
+  Future<bool> rewindLastSwipe() async {
+    final target = _lastSwiped;
+    if (target == null || _lastSwipeWasMatch) return false;
+    final social = ref.read(socialRepositoryProvider);
+    final uid = ref.read(currentUserIdProvider);
+    await social.undoSwipe(uid, target.id);
+    _lastSwiped = null;
+    final current = state.value ?? [];
+    state = AsyncData([target, ...current]);
+    ref.read(analyticsRepositoryProvider).logEvent('rewind');
+    return true;
+  }
+
   /// Swipe mode always acts on the card on top. Grid mode (see
   /// discoverViewModeProvider) lets the user tap any profile in the batch,
   /// not just the first, so [likeTop]/[passTop] are thin wrappers over
@@ -201,6 +241,8 @@ class DiscoverFeedNotifier extends AsyncNotifier<List<Profile>> {
     final uid = ref.read(currentUserIdProvider);
     final result = await social.like(uid, target.id);
     _removeId(target.id);
+    _lastSwiped = target;
+    _lastSwipeWasMatch = result.matched;
     ref.read(analyticsRepositoryProvider).logEvent('like', params: {'source': source});
     if (result.matched) {
       ref.read(notificationRepositoryProvider).add(
@@ -219,6 +261,8 @@ class DiscoverFeedNotifier extends AsyncNotifier<List<Profile>> {
     final uid = ref.read(currentUserIdProvider);
     await social.pass(uid, target.id);
     _removeId(target.id);
+    _lastSwiped = target;
+    _lastSwipeWasMatch = false;
     ref.read(analyticsRepositoryProvider).logEvent('pass', params: {'source': source});
   }
 
@@ -268,6 +312,33 @@ List<Profile> selectStandouts(List<Profile> profiles) {
       .where((p) => p.isVerified && p.bio.isNotEmpty && p.photoUrls.isNotEmpty && p.prompts.isNotEmpty)
       .take(10)
       .toList();
+}
+
+/// Premium's "Incognito" (Profile.incognito): hides an incognito candidate
+/// unless they're in [receivedFrom] (they already liked the viewer) —
+/// that exception matters, or an incognito member who liked someone would
+/// never be visible enough for that person to like back and match.
+List<Profile> excludeIncognito(List<Profile> profiles, {required Set<String> receivedFrom}) {
+  return profiles.where((p) => !p.incognito || receivedFrom.contains(p.id)).toList();
+}
+
+/// Premium's "Passport": filters to profiles whose city/country text
+/// contains [location], instead of the real geo distance — Discover has
+/// no radius query to actually re-fetch a different area's candidates
+/// (see FirestoreProfileRepository's doc comment). Null/blank means
+/// "no override", returning [profiles] unchanged.
+List<Profile> applyPassportFilter(List<Profile> profiles, String? location) {
+  final query = location?.trim().toLowerCase();
+  if (query == null || query.isEmpty) return profiles;
+  return profiles.where((p) => p.city.toLowerCase().contains(query) || p.country.toLowerCase().contains(query)).toList();
+}
+
+/// Premium's "Boost" (Profile.isBoosted/UserProfileRepository.
+/// activateBoost): boosted profiles first, each group otherwise keeping
+/// its existing relative order — a manual partition rather than
+/// List.sort, which Dart doesn't guarantee is stable.
+List<Profile> sortBoostedFirst(List<Profile> profiles) {
+  return [...profiles.where((p) => p.isBoosted), ...profiles.where((p) => !p.isBoosted)];
 }
 
 final _socialTickProvider = StreamProvider<void>((ref) => ref.watch(socialRepositoryProvider).changes());

@@ -5,12 +5,22 @@ class ActionButtons extends StatelessWidget {
   final VoidCallback onPass;
   final VoidCallback onLike;
   final VoidCallback onSuperLike;
+  /// Always shown (advertises the feature to Free users, standard
+  /// freemium pattern) — [onRewind] fires either way; the caller decides
+  /// whether that means "undo" or "show an upgrade prompt". [rewindLit]
+  /// only controls this button's own visual state, not whether it's
+  /// tappable — DiscoverScreen greys it out but still wants the tap to
+  /// reach a Free user so it can explain why.
+  final VoidCallback onRewind;
+  final bool rewindLit;
 
   const ActionButtons({
     super.key,
     required this.onPass,
     required this.onLike,
     required this.onSuperLike,
+    required this.onRewind,
+    this.rewindLit = true,
   });
 
   @override
@@ -18,6 +28,13 @@ class ActionButtons extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
+        _CircleButton(
+          icon: Icons.replay,
+          color: rewindLit ? AppColors.superLike : Colors.grey,
+          size: 44,
+          iconSize: 20,
+          onTap: onRewind,
+        ),
         _CircleButton(
           icon: Icons.close,
           color: AppColors.pass,

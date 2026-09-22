@@ -70,6 +70,8 @@ class ProfileScreen extends ConsumerWidget {
           const SizedBox(height: 16),
           const _SubscriptionCard(),
           const SizedBox(height: 16),
+          _BoostCard(profile: profile),
+          const SizedBox(height: 16),
           const InviteFriendsCard(),
         ],
       ),
@@ -231,6 +233,97 @@ class _VerificationCardState extends ConsumerState<_VerificationCard> {
             _requesting
                 ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
                 : TextButton(onPressed: _requestVerification, child: const Text('Verify')),
+        ],
+      ),
+    );
+  }
+}
+
+/// Premium's "Boost" — 30 minutes at the front of other users' Discover
+/// queue (Profile.isBoosted, applied in discover_providers.dart's
+/// "For You" ordering). Shown to everyone (advertise-then-upsell, same as
+/// the Rewind button) — Free members see an upgrade prompt instead of a
+/// working button.
+class _BoostCard extends ConsumerStatefulWidget {
+  final Profile? profile;
+  const _BoostCard({required this.profile});
+
+  @override
+  ConsumerState<_BoostCard> createState() => _BoostCardState();
+}
+
+class _BoostCardState extends ConsumerState<_BoostCard> {
+  static const _boostDuration = Duration(minutes: 30);
+  bool _activating = false;
+
+  Future<void> _activate() async {
+    setState(() => _activating = true);
+    HapticFeedback.mediumImpact();
+    final uid = ref.read(currentUserIdProvider);
+    try {
+      await ref.read(userProfileRepositoryProvider).activateBoost(uid, duration: _boostDuration);
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text("You're boosted for the next 30 minutes 🚀")));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    } finally {
+      if (mounted) setState(() => _activating = false);
+    }
+  }
+
+  String _formatTime(DateTime d) {
+    final hour = d.hour % 12 == 0 ? 12 : d.hour % 12;
+    final minute = d.minute.toString().padLeft(2, '0');
+    return '$hour:$minute ${d.hour >= 12 ? 'PM' : 'AM'}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tier = ref.watch(subscriptionTierProvider);
+    final isPremium = tier == SubscriptionTier.premium;
+    final isBoosted = widget.profile?.isBoosted ?? false;
+    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.rocket_launch, color: isBoosted ? AppColors.primary : onSurfaceVariant),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isBoosted ? "You're boosted" : 'Boost',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                Text(
+                  isBoosted
+                      ? 'Front of the queue until ${_formatTime(widget.profile!.boostedUntil!)}'
+                      : (isPremium
+                          ? 'Be seen first in Discover for 30 minutes.'
+                          : 'Premium members can jump the queue for 30 minutes.'),
+                  style: TextStyle(color: onSurfaceVariant, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          if (!isPremium)
+            TextButton(onPressed: () => context.push('/paywall'), child: const Text('Upgrade'))
+          else if (isBoosted)
+            const SizedBox.shrink()
+          else
+            _activating
+                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                : TextButton(onPressed: _activate, child: const Text('Boost now')),
         ],
       ),
     );

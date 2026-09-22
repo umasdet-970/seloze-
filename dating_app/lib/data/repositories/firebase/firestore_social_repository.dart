@@ -316,6 +316,19 @@ class FirestoreSocialRepository implements SocialRepository {
   }
 
   @override
+  Future<void> undoSwipe(String uid, String targetId) async {
+    // Deletes the swipe record and, if it was a like/rose that hadn't
+    // matched yet, the pending like it created on targetId's side — same
+    // two docs `like()`/`pass()` write, just removed instead. Never
+    // called after a match (see the interface doc comment), so there's
+    // no matches/ doc to worry about here.
+    await Future.wait([
+      _userSub(uid, 'swipes').doc(targetId).delete(),
+      _userSub(targetId, 'likesReceived').doc(uid).delete(),
+    ]);
+  }
+
+  @override
   Future<void> unmatch(String uid, String otherId) async {
     await Future.wait([
       _userSub(uid, 'matches').doc(otherId).delete(),

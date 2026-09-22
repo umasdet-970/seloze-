@@ -25,6 +25,20 @@ abstract class UserProfileRepository {
   /// Real implementation calls the AI moderation API + admin review
   /// queue (roadmap phase 8); this mock just approves after a delay.
   Future<void> requestVerification(String uid);
+
+  /// Premium's "Boost" — marks [uid] boosted for [duration] (see
+  /// Profile.boostedUntil/isBoosted), sorted first in other users'
+  /// Discover feeds for that window (discover_providers.dart). No-ops
+  /// (throws) if a boost is already active — checked by the caller via
+  /// [activeBoostUntil] before calling this, not re-checked here, since
+  /// the UI already disables the button while one's active.
+  Future<void> activateBoost(String uid, {required Duration duration});
+
+  /// Null/past means not currently boosted.
+  DateTime? activeBoostUntil(String uid);
+
+  /// Premium's "Incognito" (see Profile.incognito) — on/off, no expiry.
+  Future<void> setIncognito(String uid, bool value);
 }
 
 class MockUserProfileRepository implements UserProfileRepository {
@@ -72,6 +86,30 @@ class MockUserProfileRepository implements UserProfileRepository {
     final profile = _profiles[uid];
     if (profile == null) return;
     _profiles[uid] = profile.copyWith(isVerified: true);
+    _changesController.add(null);
+  }
+
+  @override
+  DateTime? activeBoostUntil(String uid) {
+    final until = _profiles[uid]?.boostedUntil;
+    return until != null && until.isAfter(DateTime.now()) ? until : null;
+  }
+
+  @override
+  Future<void> activateBoost(String uid, {required Duration duration}) async {
+    await Future.delayed(const Duration(milliseconds: 200));
+    final profile = _profiles[uid];
+    if (profile == null) return;
+    _profiles[uid] = profile.copyWith(boostedUntil: DateTime.now().add(duration));
+    _changesController.add(null);
+  }
+
+  @override
+  Future<void> setIncognito(String uid, bool value) async {
+    await Future.delayed(const Duration(milliseconds: 150));
+    final profile = _profiles[uid];
+    if (profile == null) return;
+    _profiles[uid] = profile.copyWith(incognito: value);
     _changesController.add(null);
   }
 }

@@ -68,6 +68,13 @@ abstract class SocialRepository {
   Future<LikeResult> like(String uid, String targetId);
   Future<void> pass(String uid, String targetId);
 
+  /// Undoes [uid]'s most recent like/pass/rose on [targetId] (Premium-only
+  /// "Rewind" — see DiscoverFeedNotifier.rewindLastSwipe). Only ever called
+  /// for an action that did NOT result in a match — the caller tracks
+  /// that, since unwinding an already-formed match is a much bigger,
+  /// riskier operation this doesn't attempt.
+  Future<void> undoSwipe(String uid, String targetId);
+
   /// A Like that always reveals the sender to [targetId] by name — bypasses
   /// the "who liked you" blur/paywall for this one profile even if
   /// [targetId] is Free tier (see LikesScreen, rose_config.dart). Same
@@ -256,6 +263,15 @@ class MockSocialRepository implements SocialRepository {
 
   @override
   Set<String> roseSenderIds(String uid) => Set.unmodifiable(_roseSenders[uid] ?? const {});
+
+  @override
+  Future<void> undoSwipe(String uid, String targetId) async {
+    _likesGiven[uid]?.remove(targetId);
+    _passesGiven[uid]?.remove(targetId);
+    _likesReceived[targetId]?.remove(uid);
+    _roseSenders[targetId]?.remove(uid);
+    _notify();
+  }
 
   @override
   Future<void> pass(String uid, String targetId) async {

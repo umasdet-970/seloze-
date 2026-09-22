@@ -47,6 +47,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
         children: [
           _buildHeader(context, used, limit, tier),
           const SizedBox(height: 12),
+          _PassportBanner(location: ref.watch(passportLocationProvider)),
           _StandoutsRow(profiles: ref.watch(standoutProfilesProvider)),
           _buildTabChips(context, selectedTab),
           if (kUseAds && tier == SubscriptionTier.free) ...[
@@ -125,6 +126,8 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
               onPass: () => _swiperController.swipe(CardSwiperDirection.left),
               onLike: () => _swiperController.swipe(CardSwiperDirection.right),
               onSuperLike: () => _swiperController.swipe(CardSwiperDirection.top),
+              onRewind: () => _handleRewind(tier),
+              rewindLit: tier == SubscriptionTier.premium && ref.watch(discoverFeedProvider.notifier).canRewind,
             ),
           ],
           const SizedBox(height: 12),
@@ -155,6 +158,36 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
       }
     }
+  }
+
+  Future<void> _handleRewind(SubscriptionTier tier) async {
+    if (tier != SubscriptionTier.premium) {
+      // Advertise-then-upsell (same pattern as the blurred Likes grid) —
+      // the button is always visible/tappable so Free users discover the
+      // feature exists, rather than it being invisible until they pay.
+      HapticFeedback.selectionClick();
+      await showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Rewind is a Premium feature'),
+          content: const Text('Upgrade to Premium to undo your last swipe.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Not now')),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(context);
+                context.push('/paywall');
+              },
+              child: const Text('See Premium'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    final undone = await ref.read(discoverFeedProvider.notifier).rewindLastSwipe();
+    if (undone) HapticFeedback.mediumImpact();
   }
 
   void _handleGridLike(Profile profile) async {
@@ -363,6 +396,38 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
             ),
           );
         }).toList(),
+      ),
+    );
+  }
+}
+
+/// Shown while Passport (see passportLocationProvider) is active, so it's
+/// never a silent state the user forgets they turned on — a one-tap way
+/// back to their real location, right where they set it.
+class _PassportBanner extends ConsumerWidget {
+  final String? location;
+  const _PassportBanner({required this.location});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (location == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+        child: Row(
+          children: [
+            const Icon(Icons.flight_takeoff, size: 16, color: AppColors.primary),
+            const SizedBox(width: 8),
+            Expanded(child: Text('Browsing $location', style: const TextStyle(fontSize: 12, color: AppColors.primary))),
+            GestureDetector(
+              onTap: () => ref.read(passportLocationProvider.notifier).state = null,
+              child: const Text('Reset', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary)),
+            ),
+          ],
+        ),
       ),
     );
   }

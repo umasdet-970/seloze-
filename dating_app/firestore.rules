@@ -70,8 +70,11 @@ service cloud.firestore {
         // they like someone who hasn't liked back yet.
         allow create: if isOwner(fromId);
         // Deleted by the subcollection owner once they like back and the
-        // match transaction fires.
-        allow delete: if isOwner(uid);
+        // match transaction fires, OR by the original liker themselves —
+        // Premium's "Rewind" undoes a like that hasn't matched yet
+        // (SocialRepository.undoSwipe), which needs to remove this same
+        // doc from the liker's side, not the receiver's.
+        allow delete: if isOwner(uid) || isOwner(fromId);
       }
 
       match /matches/{otherId} {

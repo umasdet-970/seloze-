@@ -111,12 +111,20 @@ test("a member can manage their own block list", async () => {
 });
 
 // ------------------------------------------------------------- likes/matches
-test("only the liker can create a pending like; only the receiver can read/delete it", async () => {
+test("only the liker can create a pending like; only the receiver can read it", async () => {
   await assertSucceeds(setDoc(doc(as("bob"), "users/alice/likesReceived/bob"), { fromUserId: "bob" }));
   await assertFails(setDoc(doc(as("carol"), "users/alice/likesReceived/bob"), { fromUserId: "bob" }));
   await assertSucceeds(getDoc(doc(as("alice"), "users/alice/likesReceived/bob")));
   await assertFails(getDoc(doc(as("bob"), "users/alice/likesReceived/bob")));
   await assertSucceeds(deleteDoc(doc(as("alice"), "users/alice/likesReceived/bob")));
+});
+
+// PREMIUM: Rewind (SocialRepository.undoSwipe) needs the original liker,
+// not just the receiver, to be able to delete their own pending like.
+test("the original liker can also delete their own pending like (Rewind), but nobody else can", async () => {
+  await seed((db) => setDoc(doc(db, "users/alice/likesReceived/bob"), { fromUserId: "bob" }));
+  await assertFails(deleteDoc(doc(as("carol"), "users/alice/likesReceived/bob")));
+  await assertSucceeds(deleteDoc(doc(as("bob"), "users/alice/likesReceived/bob")));
 });
 
 test("either participant can create a match; only the owner can read or delete their copy", async () => {

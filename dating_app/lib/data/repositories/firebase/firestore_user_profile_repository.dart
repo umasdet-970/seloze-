@@ -121,6 +121,27 @@ class FirestoreUserProfileRepository implements UserProfileRepository {
   }
 
   @override
+  DateTime? activeBoostUntil(String uid) {
+    _ensureListening(uid);
+    final until = _profileCache[uid]?.boostedUntil;
+    return until != null && until.isAfter(DateTime.now()) ? until : null;
+  }
+
+  @override
+  Future<void> activateBoost(String uid, {required Duration duration}) async {
+    // Millis (not Timestamp.fromDate) — see Profile.toMap's comment on
+    // boostedUntil for why, and so Profile.fromMap's `as num?` parsing
+    // reads back consistently with what MockUserProfileRepository stores.
+    await _userDoc(uid)
+        .set({'boostedUntil': DateTime.now().add(duration).millisecondsSinceEpoch}, SetOptions(merge: true));
+  }
+
+  @override
+  Future<void> setIncognito(String uid, bool value) async {
+    await _userDoc(uid).set({'incognito': value}, SetOptions(merge: true));
+  }
+
+  @override
   Future<void> requestVerification(String uid) async {
     // Real moderation happens server-side (Cloud Function reviewing the
     // submitted photos, or an admin queue) and flips this flag once

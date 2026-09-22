@@ -41,6 +41,20 @@ class Profile {
   final bool isOnline;
   final bool isVerified;
   final List<ProfilePrompt> prompts;
+  /// Premium's "Boost" (spec: temporary front-of-queue placement) — public
+  /// so other users' Discover feeds can sort it first (see
+  /// discover_providers.dart), same visibility level as isOnline/
+  /// isVerified. Null/past means not currently boosted.
+  final DateTime? boostedUntil;
+  /// Premium's "Incognito" — hidden from other members' Discover feeds
+  /// unless that member already liked this profile (see
+  /// discover_providers.dart's filtering). Lives on the public profile
+  /// doc, not the private settings doc, because every OTHER member's
+  /// feed-building needs to read it per-candidate — it's a visibility
+  /// flag, not sensitive data, same class as isOnline/isVerified.
+  final bool incognito;
+
+  bool get isBoosted => boostedUntil != null && boostedUntil!.isAfter(DateTime.now());
 
   const Profile({
     required this.id,
@@ -59,6 +73,8 @@ class Profile {
     this.isOnline = false,
     this.isVerified = false,
     this.prompts = const [],
+    this.boostedUntil,
+    this.incognito = false,
   });
 
   factory Profile.fromMap(String id, Map<String, dynamic> map) {
@@ -81,6 +97,10 @@ class Profile {
       prompts: (map['prompts'] as List? ?? const [])
           .map((p) => ProfilePrompt.fromMap(Map<String, dynamic>.from(p as Map)))
           .toList(),
+      boostedUntil: (map['boostedUntil'] as num?) != null
+          ? DateTime.fromMillisecondsSinceEpoch((map['boostedUntil'] as num).toInt())
+          : null,
+      incognito: map['incognito'] as bool? ?? false,
     );
   }
 
@@ -100,6 +120,15 @@ class Profile {
         'isOnline': isOnline,
         'isVerified': isVerified,
         'prompts': prompts.map((p) => p.toMap()).toList(),
+        // Millis, not a Firestore Timestamp — this model is shared by the
+        // Mock repo too, and staying a plain number keeps fromMap's parsing
+        // (`as num?`) identical for both, rather than branching on
+        // Firestore's Timestamp type only here. UserProfileRepository
+        // writes/reads this field directly (not through toMap/fromMap on
+        // the whole profile), so this key mainly matters for round-trip
+        // tests and any future caller that does serialize via toMap.
+        if (boostedUntil != null) 'boostedUntil': boostedUntil!.millisecondsSinceEpoch,
+        'incognito': incognito,
       };
 
   Profile copyWith({
@@ -118,6 +147,8 @@ class Profile {
     bool? isOnline,
     bool? isVerified,
     List<ProfilePrompt>? prompts,
+    DateTime? boostedUntil,
+    bool? incognito,
   }) {
     return Profile(
       id: id,
@@ -136,6 +167,8 @@ class Profile {
       isOnline: isOnline ?? this.isOnline,
       isVerified: isVerified ?? this.isVerified,
       prompts: prompts ?? this.prompts,
+      boostedUntil: boostedUntil ?? this.boostedUntil,
+      incognito: incognito ?? this.incognito,
     );
   }
 }
