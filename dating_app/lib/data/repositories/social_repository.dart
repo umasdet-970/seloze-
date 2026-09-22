@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../../core/config/ad_config.dart';
 import '../../core/utils/rate_limiter.dart';
 import '../models/social_models.dart';
 
@@ -54,6 +55,16 @@ abstract class SocialRepository {
   /// safe to call again for a profile already shown today.
   void recordDiscoveryShown(String uid, String profileId);
 
+  /// How many rewarded-ad discovery bonuses [uid] has already earned today
+  /// (resets at local midnight, same as [discoveriesUsedToday]), capped at
+  /// [kMaxAdBonusPerDay] — see ad_config.dart.
+  int adBonusUsedToday(String uid);
+
+  /// Credits one ad-bonus discovery after the rewarded ad's
+  /// onUserEarnedReward callback fires. No-ops once [kMaxAdBonusPerDay] is
+  /// reached for today.
+  void recordAdBonusEarned(String uid);
+
   Future<LikeResult> like(String uid, String targetId);
   Future<void> pass(String uid, String targetId);
 
@@ -76,6 +87,7 @@ class MockSocialRepository implements SocialRepository {
   final Map<String, Set<String>> _reportedByMe = {};
   final Map<String, DateTime> _lastDiscoveryDate = {};
   final Map<String, Set<String>> _shownToday = {};
+  final Map<String, int> _adBonusToday = {};
   final Set<String> _seeded = {};
   final _reportLimiter = RateLimiter(maxEvents: 5, window: const Duration(minutes: 10));
   // Bot detection (spec section 12/19): sustained swiping faster than a
@@ -135,6 +147,7 @@ class MockSocialRepository implements SocialRepository {
     final last = _lastDiscoveryDate[uid];
     if (last == null || !_isToday(last)) {
       _shownToday[uid] = {};
+      _adBonusToday[uid] = 0;
       _lastDiscoveryDate[uid] = DateTime.now();
     }
   }
@@ -160,6 +173,21 @@ class MockSocialRepository implements SocialRepository {
   void recordDiscoveryShown(String uid, String profileId) {
     _resetIfNewDay(uid);
     (_shownToday[uid] ??= {}).add(profileId);
+  }
+
+  @override
+  int adBonusUsedToday(String uid) {
+    _resetIfNewDay(uid);
+    return _adBonusToday[uid] ?? 0;
+  }
+
+  @override
+  void recordAdBonusEarned(String uid) {
+    _resetIfNewDay(uid);
+    final current = _adBonusToday[uid] ?? 0;
+    if (current >= kMaxAdBonusPerDay) return;
+    _adBonusToday[uid] = current + 1;
+    _notify();
   }
 
   @override

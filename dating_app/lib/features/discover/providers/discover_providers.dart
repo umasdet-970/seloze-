@@ -230,6 +230,23 @@ final discoverFeedProvider =
 
 final _socialTickProvider = StreamProvider<void>((ref) => ref.watch(socialRepositoryProvider).changes());
 
+/// Extra daily discoveries earned today from watching rewarded ads (see
+/// ad_config.dart's kUseRewardedAds/kMaxAdBonusPerDay) — the ad-driven
+/// counterpart to referralBonusProvider.
+final adBonusUsedTodayProvider = Provider<int>((ref) {
+  final uid = ref.watch(currentUserIdProvider);
+  // Checked before touching socialRepositoryProvider (rather than after,
+  // like some other providers in this file): dailyDiscoveryLimitProvider
+  // watches this even for a signed-out/not-yet-resolved session, and
+  // instantiating FirestoreSocialRepository this early — before Firebase
+  // has necessarily initialized — is worth avoiding when there's no uid to
+  // look anything up for anyway.
+  if (uid.isEmpty) return 0;
+  final social = ref.watch(socialRepositoryProvider);
+  ref.watch(_socialTickProvider);
+  return social.adBonusUsedToday(uid);
+});
+
 /// Profiles the current user has explicitly blocked — for the Blocked
 /// Users settings screen (spec section 14).
 final blockedProfilesProvider = FutureProvider<List<Profile>>((ref) async {

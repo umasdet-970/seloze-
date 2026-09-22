@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/ads/rewarded_ad_service.dart';
 import '../../../core/config/ad_config.dart';
 import '../../../core/config/referral_config.dart';
 import '../../../core/theme/app_theme.dart';
@@ -11,6 +12,7 @@ import '../../../data/models/subscription_models.dart';
 import '../../../shared/widgets/ad_banner.dart';
 import '../../../shared/widgets/report_sheet.dart';
 import '../../../shared/widgets/shimmer_placeholders.dart';
+import '../../analytics/providers/analytics_providers.dart';
 import '../../notifications/providers/notification_providers.dart';
 import '../../referrals/widgets/invite_friends_card.dart';
 import '../../subscription/providers/subscription_providers.dart';
@@ -53,11 +55,14 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
               data: (profiles) {
                 if (profiles.isEmpty) {
                   final limitReached = used >= limit;
+                  final adBonusLeft = kMaxAdBonusPerDay - ref.watch(adBonusUsedTodayProvider);
                   return _EmptyState(
                     limitReached: limitReached,
                     onRefresh: () => ref.read(discoverFeedProvider.notifier).refresh(),
                     onUpgrade: () => context.push('/paywall'),
                     onInvite: () => shareInvite(ref),
+                    canWatchAd: kUseRewardedAds && adBonusLeft > 0,
+                    onWatchAd: () => _watchAdForBonus(context, ref),
                   );
                 }
                 return Padding(
@@ -123,6 +128,27 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
       }
+    }
+  }
+
+  Future<void> _watchAdForBonus(BuildContext context, WidgetRef ref) async {
+    final uid = ref.read(currentUserIdProvider);
+    if (!RewardedAdService.instance.isReady) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text("Ad isn't ready yet — try again in a moment.")));
+      RewardedAdService.instance.preload();
+      return;
+    }
+    final earned = await RewardedAdService.instance.show(
+      onEarned: () {
+        // Fires from AdMob's own reward callback, not the button tap — see
+        // RewardedAdService.show()'s doc comment for why that matters.
+        ref.read(socialRepositoryProvider).recordAdBonusEarned(uid);
+        ref.read(analyticsRepositoryProvider).logEvent('ad_bonus_earned');
+      },
+    );
+    if (earned && context.mounted) {
+      await ref.read(discoverFeedProvider.notifier).refresh();
     }
   }
 
@@ -323,11 +349,15 @@ class _EmptyState extends StatelessWidget {
   final VoidCallback onRefresh;
   final VoidCallback onUpgrade;
   final VoidCallback onInvite;
+  final bool canWatchAd;
+  final VoidCallback onWatchAd;
   const _EmptyState({
     required this.limitReached,
     required this.onRefresh,
     required this.onUpgrade,
     required this.onInvite,
+    required this.canWatchAd,
+    required this.onWatchAd,
   });
 
   @override
@@ -359,6 +389,14 @@ class _EmptyState extends StatelessWidget {
               onPressed: limitReached ? onInvite : onRefresh,
               child: Text(limitReached ? 'Invite friends (+$kBonusDiscoveriesPerFriend a day each)' : 'Refresh'),
             ),
+            if (limitReached && canWatchAd) ...[
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: onWatchAd,
+                icon: const Icon(Icons.play_circle_outline, size: 18),
+                label: const Text('Watch an ad for +1 discovery'),
+              ),
+            ],
             if (limitReached)
               TextButton(onPressed: onUpgrade, child: const Text('See Premium')),
           ],

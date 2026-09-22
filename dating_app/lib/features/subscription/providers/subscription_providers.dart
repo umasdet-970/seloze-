@@ -45,9 +45,12 @@ final chatUnlockedProvider = Provider<bool>((ref) {
 /// Free vs Premium gating (spec section 4: 10 vs 50 discoveries/day).
 final dailyDiscoveryLimitProvider = Provider<int>((ref) {
   final tier = ref.watch(subscriptionTierProvider);
-  final base = tier == SubscriptionTier.premium ? 50 : 10;
-  // Invite-a-friend bonus (see referral_providers.dart) on top of the plan.
-  return base + ref.watch(referralBonusProvider);
+  final int base = tier == SubscriptionTier.premium ? 50 : 10;
+  // Invite-a-friend bonus (see referral_providers.dart) and today's
+  // rewarded-ad bonus (see ad_config.dart), both on top of the plan.
+  final int referralBonus = ref.watch(referralBonusProvider);
+  final int adBonus = ref.watch(adBonusUsedTodayProvider);
+  return base + referralBonus + adBonus;
 });
 
 /// (used, limit) for today — drives the "X of Y discoveries left" UI and

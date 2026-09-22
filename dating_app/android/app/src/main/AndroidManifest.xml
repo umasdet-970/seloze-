@@ -61,12 +61,13 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
-        <!-- Google's public TEST AdMob app ID (see lib/core/config/ad_config.dart) —
-             required for the SDK to initialize at all, even with test ad units.
-             Replace with your real AdMob app ID before a real launch. -->
+        <!-- Real Seloze AdMob app ID (admob.google.com, app "Seloze-Global
+             Dating App"). Required for the SDK to initialize even while
+             kUseAds is false / test ad units are still in use elsewhere —
+             see lib/core/config/ad_config.dart. -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713" />
+            android:value="ca-app-pub-4841811327884657~2139845035" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

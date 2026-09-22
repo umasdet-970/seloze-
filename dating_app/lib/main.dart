@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'core/ads/rewarded_ad_service.dart';
 import 'core/config/ad_config.dart';
 import 'core/config/backend_config.dart';
 import 'core/router/app_router.dart';
@@ -27,8 +28,11 @@ void main() async {
   if (kUseRevenueCat) {
     await configureRevenueCat();
   }
-  if (kUseAds) {
+  if (kUseAds || kUseRewardedAds) {
     await MobileAds.instance.initialize();
+  }
+  if (kUseRewardedAds) {
+    RewardedAdService.instance.preload();
   }
   runApp(const ProviderScope(child: ConnectApp()));
 }

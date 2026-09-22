@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../core/config/ad_config.dart';
 import '../../../core/utils/rate_limiter.dart';
 import '../../models/social_models.dart';
 import '../social_repository.dart';
@@ -18,7 +19,7 @@ String _todayKey() {
 ///   users/{uid}/matches/{otherId}         {matchedAt, otherUserId}
 ///   users/{uid}/blocked/{targetId}        {targetId, createdAt}
 ///   users/{uid}/reported/{targetId}       {reason, details, createdAt}
-///   users/{uid}/private/quota             {date, shownIds}
+///   users/{uid}/private/quota             {date, shownIds, adBonusCount}
 ///   reports/{autoId}                      {reporterId, targetId, reason, details, createdAt} -- admin dashboard
 ///
 /// `otherUserId`/`fromUserId` duplicate each doc's own ID as a queryable
@@ -49,7 +50,7 @@ class FirestoreSocialRepository implements SocialRepository {
   final Map<String, Set<String>> _reportedCache = {};
   final Map<String, List<String>> _likesReceivedCache = {};
   final Map<String, List<MatchRecord>> _matchesCache = {};
-  final Map<String, ({String date, Set<String> shownIds})> _quotaCache = {};
+  final Map<String, ({String date, Set<String> shownIds, int adBonusCount})> _quotaCache = {};
   final Set<String> _listening = {};
 
   void _notify() => _controller.add(null);
@@ -97,7 +98,8 @@ class FirestoreSocialRepository implements SocialRepository {
       final data = doc.data();
       final date = data?['date'] as String? ?? '';
       final ids = Set<String>.from(data?['shownIds'] as List? ?? const []);
-      _quotaCache[uid] = (date: date, shownIds: ids);
+      final adBonusCount = (data?['adBonusCount'] as num?)?.toInt() ?? 0;
+      _quotaCache[uid] = (date: date, shownIds: ids, adBonusCount: adBonusCount);
       _notify();
     });
   }
@@ -148,6 +150,13 @@ class FirestoreSocialRepository implements SocialRepository {
     return quota.shownIds;
   }
 
+  int _adBonusTodayRaw(String uid) {
+    _ensureListening(uid);
+    final quota = _quotaCache[uid];
+    if (quota == null || quota.date != _todayKey()) return 0;
+    return quota.adBonusCount;
+  }
+
   @override
   Set<String> shownProfileIdsToday(String uid) => Set.unmodifiable(_shownTodayRaw(uid));
 
@@ -164,6 +173,7 @@ class FirestoreSocialRepository implements SocialRepository {
     final current = _shownTodayRaw(uid);
     if (current.contains(profileId)) return;
     final updated = {...current, profileId};
+    final adBonusCount = _adBonusTodayRaw(uid);
     // Update the cache immediately (synchronous callers read it right
     // after calling this), then persist in the background — matches the
     // interface's fire-and-forget (non-Future) contract. `catchError`
@@ -171,13 +181,38 @@ class FirestoreSocialRepository implements SocialRepository {
     // (i.e. every swipe), so it's the highest-frequency write in the
     // app — a transient failure without a handler would be the most
     // likely source of unhandled zone errors under real-world flakiness.
-    _quotaCache[uid] = (date: today, shownIds: updated);
+    // Carries the ad-bonus count along (rather than a partial `update`) so
+    // this and recordAdBonusEarned agree on what "today's quota doc" is.
+    _quotaCache[uid] = (date: today, shownIds: updated, adBonusCount: adBonusCount);
     unawaited(
       _firestore.collection('users').doc(uid).collection('private').doc('quota').set({
         'date': today,
         'shownIds': updated.toList(),
+        'adBonusCount': adBonusCount,
       }).catchError((_) {}),
     );
+  }
+
+  @override
+  int adBonusUsedToday(String uid) => _adBonusTodayRaw(uid);
+
+  @override
+  void recordAdBonusEarned(String uid) {
+    _ensureListening(uid);
+    final today = _todayKey();
+    final current = _adBonusTodayRaw(uid);
+    if (current >= kMaxAdBonusPerDay) return;
+    final shownIds = _shownTodayRaw(uid);
+    final updated = current + 1;
+    _quotaCache[uid] = (date: today, shownIds: shownIds, adBonusCount: updated);
+    unawaited(
+      _firestore.collection('users').doc(uid).collection('private').doc('quota').set({
+        'date': today,
+        'shownIds': shownIds.toList(),
+        'adBonusCount': updated,
+      }).catchError((_) {}),
+    );
+    _notify();
   }
 
   @override
