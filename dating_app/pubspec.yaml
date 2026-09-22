@@ -90,6 +90,12 @@ dependencies:
   audioplayers: ^6.1.0
   path_provider: ^2.1.4
 
+  # In-app voice/video calls (spec: Bumble/Badoo-style — talk before
+  # meeting, without exchanging numbers). Gated behind kUseVoiceVideoCalls
+  # (see lib/core/config/call_config.dart) — off until a real Agora App ID
+  # exists, same story as AdMob before that account existed.
+  agora_rtc_engine: ^6.5.2
+
   # Acquisition source (spec section 17), Android only — real Google
   # Play Install Referrer data (a first-party Play Store capability,
   # free, no AdMob/MMP account needed) once at first sign-up. Called

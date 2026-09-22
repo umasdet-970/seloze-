@@ -18,6 +18,7 @@ enum NotificationType {
   referralReward,
   roseReceived,
   matchExpired,
+  incomingCall,
 }
 
 extension NotificationTypeMeta on NotificationType {
@@ -36,13 +37,14 @@ extension NotificationTypeMeta on NotificationType {
         NotificationType.referralReward => Icons.group_add,
         NotificationType.roseReceived => Icons.local_florist,
         NotificationType.matchExpired => Icons.hourglass_bottom,
+        NotificationType.incomingCall => Icons.call,
       };
 
   /// Route to open when tapped, if any.
   String? get route => switch (this) {
         NotificationType.newLike || NotificationType.roseReceived => '/likes',
         NotificationType.mutualMatch => '/matches',
-        NotificationType.newMessage => '/chat',
+        NotificationType.newMessage || NotificationType.incomingCall => '/chat',
         NotificationType.profileVerification || NotificationType.referralReward => '/profile',
         NotificationType.subscriptionPurchase ||
         NotificationType.subscriptionRenewal ||

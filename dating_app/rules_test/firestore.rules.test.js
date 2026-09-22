@@ -157,6 +157,19 @@ test("a member cannot create a conversation they are not part of", async () => {
   await assertFails(setDoc(doc(as("mallory"), "conversations/x_y"), { participants: ["x", "y"] }));
 });
 
+// ----------------------------------------------------------------- calls
+test("either conversation participant can read/create/update a call, nobody else can", async () => {
+  await assertSucceeds(setDoc(doc(as("a"), "calls/a_b"), { callerId: "a", calleeId: "b", status: "ringing" }));
+  await assertSucceeds(getDoc(doc(as("b"), "calls/a_b")));
+  await assertSucceeds(updateDoc(doc(as("b"), "calls/a_b"), { status: "accepted" }));
+  await assertFails(getDoc(doc(as("mallory"), "calls/a_b")));
+  await assertFails(setDoc(doc(as("mallory"), "calls/a_b"), { callerId: "a", calleeId: "b", status: "ringing" }));
+});
+
+test("a call can only be created with callerId set to the creator", async () => {
+  await assertFails(setDoc(doc(as("a"), "calls/a_b"), { callerId: "b", calleeId: "a", status: "ringing" }));
+});
+
 // ----------------------------------------------------------- reports & audit
 test("members can file reports as themselves; only admins can read them; nobody can delete", async () => {
   await assertSucceeds(addDoc(collection(as("alice"), "reports"), { reporterId: "alice", targetId: "bob" }));

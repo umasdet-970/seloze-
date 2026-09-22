@@ -32,6 +32,14 @@
     <!-- Chat voice notes (record package) — requested at the moment the
          user first taps the mic button, not on app launch. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <!-- In-app voice/video calls (agora_rtc_engine — kUseVoiceVideoCalls,
+         off until a real Agora account exists, see call_config.dart).
+         CAMERA/RECORD_AUDIO are already declared above; these are Agora's
+         remaining requirements for call routing and Bluetooth headsets. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
 
     <application
         android:label="Seloze"

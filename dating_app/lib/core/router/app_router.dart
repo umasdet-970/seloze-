@@ -10,6 +10,7 @@ import '../../features/auth/screens/forgot_password_screen.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/otp_screen.dart';
 import '../../features/auth/screens/signup_screen.dart';
+import '../../features/calls/screens/call_screen.dart';
 import '../../features/chat/screens/chat_detail_screen.dart';
 import '../../features/chat/screens/chat_list_screen.dart';
 import '../../features/discover/screens/discover_screen.dart';
@@ -106,6 +107,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => ChatDetailScreen(
           conversationId: state.pathParameters['id']!,
           profile: state.extra as Profile?,
+        ),
+      ),
+      GoRoute(
+        path: '/call/:id',
+        builder: (context, state) => CallScreen(
+          conversationId: state.pathParameters['id']!,
+          otherProfile: state.extra as Profile,
         ),
       ),
       ShellRoute(

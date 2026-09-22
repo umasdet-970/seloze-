@@ -10,12 +10,16 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import '../../../core/config/backend_config.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../data/models/call_models.dart';
 import '../../../data/models/chat_message.dart';
+import '../../../data/models/notification_item.dart';
 import '../../../data/models/profile.dart';
 import '../../../data/repositories/firebase/firebase_storage_uploader.dart';
 import '../../../shared/widgets/report_sheet.dart';
 import '../../analytics/providers/analytics_providers.dart';
+import '../../calls/providers/call_providers.dart';
 import '../../discover/providers/discover_providers.dart';
+import '../../notifications/providers/notification_providers.dart';
 import '../../safety/providers/moderation_providers.dart';
 import '../../subscription/providers/subscription_providers.dart';
 import '../providers/chat_providers.dart';
@@ -273,6 +277,31 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
     }
   }
 
+  /// Starts a call (spec: Bumble/Badoo-style in-app voice/video calls) —
+  /// creates the ringing CallInvite, notifies the other side (so they see
+  /// it even if they're not in this chat right now), then opens
+  /// CallScreen, which drives the rest of the ringing/accept/decline flow.
+  Future<void> _startCall(CallType type, Profile profile) async {
+    final uid = ref.read(currentUserIdProvider);
+    try {
+      await ref.read(callRepositoryProvider).startCall(
+            widget.conversationId,
+            callerId: uid,
+            calleeId: profile.id,
+            type: type,
+          );
+      ref.read(notificationRepositoryProvider).add(
+            profile.id,
+            NotificationType.incomingCall,
+            'Incoming ${type == CallType.video ? 'video' : 'voice'} call',
+            'Open the chat to answer.',
+          );
+      if (mounted) context.push('/call/${widget.conversationId}', extra: profile);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isPremium = ref.watch(chatUnlockedProvider);
@@ -282,6 +311,19 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
     if (profile == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
+
+    // Someone is calling ME on this conversation — jump straight to
+    // CallScreen (which renders the Accept/Decline UI for a callee) even
+    // if I'm just sitting in this chat rather than tapping a
+    // notification. ref.listen (not watch) so this only fires once per
+    // ringing call, not on every rebuild.
+    ref.listen(currentCallProvider(widget.conversationId), (previous, next) {
+      final wasRinging = previous?.status == CallStatus.ringing;
+      final isRinging = next?.status == CallStatus.ringing;
+      if (!wasRinging && isRinging && next!.calleeId == uid) {
+        context.push('/call/${widget.conversationId}', extra: profile);
+      }
+    });
 
     if (!isPremium) {
       return Scaffold(
@@ -346,6 +388,16 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.call_outlined),
+            tooltip: 'Voice call',
+            onPressed: () => _startCall(CallType.audio, profile),
+          ),
+          IconButton(
+            icon: const Icon(Icons.videocam_outlined),
+            tooltip: 'Video call',
+            onPressed: () => _startCall(CallType.video, profile),
+          ),
           PopupMenuButton<String>(
             onSelected: (action) => _handleMenu(action, profile),
             itemBuilder: (context) => const [

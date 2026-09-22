@@ -124,6 +124,23 @@ service cloud.firestore {
       }
     }
 
+    // In-app voice/video call signaling (spec: Bumble/Badoo-style — see
+    // functions-less CallRepository; the actual media join is Agora, not
+    // Firestore). One doc per conversation, id = conversationId, which is
+    // always `([uidA, uidB]..sort()).join('_')` — checking membership by
+    // splitting it avoids a get() on the conversation doc, same reasoning
+    // as chat_audio's Storage rule.
+    match /calls/{conversationId} {
+      function isCallParticipant() {
+        return signedIn() && request.auth.uid in conversationId.split('_');
+      }
+      allow read: if isCallParticipant();
+      allow create: if isCallParticipant() && request.resource.data.callerId == request.auth.uid;
+      // Either side: the callee accepting/declining, or either side
+      // ending an in-progress call.
+      allow update: if isCallParticipant();
+    }
+
     match /reports/{id} {
       // Top-level collection for the admin dashboard. Clients can only
       // file a report (create); reading/resolving the queue needs the
