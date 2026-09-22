@@ -1,19 +1,25 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:record/record.dart';
+import '../../../core/config/backend_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/chat_message.dart';
 import '../../../data/models/profile.dart';
+import '../../../data/repositories/firebase/firebase_storage_uploader.dart';
 import '../../../shared/widgets/report_sheet.dart';
 import '../../analytics/providers/analytics_providers.dart';
 import '../../discover/providers/discover_providers.dart';
 import '../../safety/providers/moderation_providers.dart';
 import '../../subscription/providers/subscription_providers.dart';
 import '../providers/chat_providers.dart';
+import '../widgets/voice_note_bubble.dart';
 
 const _sampleImageUrls = [
   'https://images.unsplash.com/photo-1552168324-d612d77725e3?w=600',
@@ -37,6 +43,13 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
   Profile? _resolvedProfile;
   Timer? _typingStopTimer;
   bool _isTypingSent = false;
+
+  final _audioRecorder = AudioRecorder();
+  bool _isRecording = false;
+  bool _isSendingRecording = false;
+  Timer? _recordingTicker;
+  Duration _recordingElapsed = Duration.zero;
+  static const _maxRecordingDuration = Duration(minutes: 1);
 
   @override
   void initState() {
@@ -70,6 +83,9 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
       // Best-effort, fire-and-forget — a widget mid-dispose can't await.
       ref.read(chatRepositoryProvider).setTyping(widget.conversationId, ref.read(currentUserIdProvider), false);
     }
+    _recordingTicker?.cancel();
+    if (_isRecording) _audioRecorder.cancel();
+    _audioRecorder.dispose();
     _textController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -173,6 +189,87 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
       _scrollToBottom();
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
+  Future<void> _startRecording() async {
+    try {
+      if (!await _audioRecorder.hasPermission()) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(const SnackBar(content: Text('Microphone permission is needed to send a voice note.')));
+        }
+        return;
+      }
+      final dir = await getTemporaryDirectory();
+      final path = '${dir.path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      await _audioRecorder.start(const RecordConfig(encoder: AudioEncoder.aacLc), path: path);
+      setState(() {
+        _isRecording = true;
+        _recordingElapsed = Duration.zero;
+      });
+      _recordingTicker = Timer.periodic(const Duration(milliseconds: 200), (_) {
+        if (!mounted) return;
+        setState(() => _recordingElapsed += const Duration(milliseconds: 200));
+        // A voice note this long would be an odd chat message and an odd
+        // Storage bill — cut it off rather than let it grow unbounded.
+        if (_recordingElapsed >= _maxRecordingDuration) _stopAndSendRecording();
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Couldn't start recording. Please try again.")));
+      }
+    }
+  }
+
+  Future<void> _cancelRecording() async {
+    _recordingTicker?.cancel();
+    try {
+      await _audioRecorder.cancel();
+    } catch (_) {
+      // Best-effort — the goal (stop recording, discard it) is met either
+      // way; nothing left to surface to the user over a cancel.
+    }
+    if (mounted) setState(() => _isRecording = false);
+  }
+
+  Future<void> _stopAndSendRecording() async {
+    _recordingTicker?.cancel();
+    final elapsed = _recordingElapsed;
+    setState(() {
+      _isRecording = false;
+      _isSendingRecording = true;
+    });
+    try {
+      final path = await _audioRecorder.stop();
+      if (path == null || elapsed.inMilliseconds < 500) {
+        // Too short to be a real voice note (e.g. an accidental tap) —
+        // silently discard rather than send an empty/near-empty clip.
+        return;
+      }
+      final uid = ref.read(currentUserIdProvider);
+      final String audioUrl;
+      if (kUseFirebase) {
+        audioUrl = await FirebaseStorageUploader().uploadChatAudio(widget.conversationId, uid, File(path));
+      } else {
+        // No Firebase project connected — same "still a real recording,
+        // just kept as a local file path" story as _pickPhoto's fallback
+        // in create_profile_screen.dart.
+        audioUrl = path;
+      }
+      await ref
+          .read(chatRepositoryProvider)
+          .sendAudio(widget.conversationId, uid, audioUrl, durationSec: elapsed.inSeconds.clamp(1, 999));
+      HapticFeedback.lightImpact();
+      ref.read(analyticsRepositoryProvider).logEvent('message_sent', params: {'type': 'audio'});
+      _scrollToBottom();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text("Couldn't send that voice note. Please try again.")));
+      }
+    } finally {
+      if (mounted) setState(() => _isSendingRecording = false);
     }
   }
 
@@ -285,12 +382,17 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                     style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
               ),
             ),
-          _Composer(
-            controller: _textController,
-            onSend: _sendText,
-            onPickImage: _pickImage,
-            onChanged: _onComposerChanged,
-          ),
+          if (_isRecording)
+            _RecordingBar(elapsed: _recordingElapsed, onCancel: _cancelRecording, onSend: _stopAndSendRecording)
+          else
+            _Composer(
+              controller: _textController,
+              onSend: _sendText,
+              onPickImage: _pickImage,
+              onChanged: _onComposerChanged,
+              onStartRecording: _isSendingRecording ? null : _startRecording,
+              isSendingRecording: _isSendingRecording,
+            ),
         ],
       ),
     );
@@ -345,7 +447,13 @@ class _MessageBubble extends StatelessWidget {
                     borderRadius: BorderRadius.circular(14),
                     child: Image.network(message.imageUrl!, width: 180, height: 180, fit: BoxFit.cover),
                   )
-                : Text(message.text ?? '', style: TextStyle(color: textColor)),
+                : message.isAudio
+                    ? VoiceNoteBubble(
+                        audioUrl: message.audioUrl!,
+                        durationSec: message.audioDurationSec ?? 0,
+                        color: textColor,
+                      )
+                    : Text(message.text ?? '', style: TextStyle(color: textColor)),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -379,8 +487,17 @@ class _Composer extends StatelessWidget {
   final VoidCallback onSend;
   final VoidCallback onPickImage;
   final ValueChanged<String> onChanged;
+  final VoidCallback? onStartRecording;
+  final bool isSendingRecording;
 
-  const _Composer({required this.controller, required this.onSend, required this.onPickImage, required this.onChanged});
+  const _Composer({
+    required this.controller,
+    required this.onSend,
+    required this.onPickImage,
+    required this.onChanged,
+    required this.onStartRecording,
+    required this.isSendingRecording,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -390,6 +507,12 @@ class _Composer extends StatelessWidget {
         child: Row(
           children: [
             IconButton(onPressed: onPickImage, icon: const Icon(Icons.image_outlined)),
+            isSendingRecording
+                ? const Padding(
+                    padding: EdgeInsets.all(8),
+                    child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+                  )
+                : IconButton(onPressed: onStartRecording, icon: const Icon(Icons.mic_none_outlined)),
             Expanded(
               child: TextField(
                 controller: controller,
@@ -407,6 +530,47 @@ class _Composer extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             IconButton.filled(onPressed: onSend, icon: const Icon(Icons.send)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Replaces [_Composer] while a voice note is being recorded — a live
+/// timer plus cancel (discard) / send (stop & upload) actions, same shape
+/// as WhatsApp/Bumble's own recording bar.
+class _RecordingBar extends StatelessWidget {
+  final Duration elapsed;
+  final VoidCallback onCancel;
+  final VoidCallback onSend;
+
+  const _RecordingBar({required this.elapsed, required this.onCancel, required this.onSend});
+
+  String _format(Duration d) {
+    final minutes = d.inMinutes;
+    final seconds = d.inSeconds % 60;
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        child: Row(
+          children: [
+            IconButton(onPressed: onCancel, icon: const Icon(Icons.delete_outline), tooltip: 'Discard'),
+            const SizedBox(width: 4),
+            const Icon(Icons.fiber_manual_record, color: Colors.red, size: 14),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Recording… ${_format(elapsed)}',
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+              ),
+            ),
+            IconButton.filled(onPressed: onSend, icon: const Icon(Icons.send), tooltip: 'Send'),
           ],
         ),
       ),

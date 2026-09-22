@@ -1,9 +1,9 @@
 {
   "name": "seloze-rules-test",
   "private": true,
-  "description": "Tests for firestore.rules against the local Firestore emulator. Run: npm test",
+  "description": "Tests for firestore.rules and storage.rules against local emulators. Run: npm test",
   "scripts": {
-    "test": "firebase emulators:exec --only firestore --project demo-seloze \"node --test\""
+    "test": "firebase emulators:exec --only firestore,storage --project demo-seloze \"node --test\""
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^3.0.4",

@@ -82,6 +82,14 @@ dependencies:
   flutter_local_notifications: ^18.0.1
   share_plus: ^13.3.0
 
+  # Voice notes in chat (spec: Hinge/Bumble-style) — record a short clip
+  # (record) and play back others' (audioplayers). Both actively
+  # maintained with Gradle 9/AGP 8 support (see google_mobile_ads' note
+  # above for why that specifically was checked, not assumed).
+  record: ^6.0.0
+  audioplayers: ^6.1.0
+  path_provider: ^2.1.4
+
   # Acquisition source (spec section 17), Android only — real Google
   # Play Install Referrer data (a first-party Play Store capability,
   # free, no AdMob/MMP account needed) once at first sign-up. Called

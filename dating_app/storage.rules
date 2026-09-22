@@ -13,10 +13,37 @@ service firebase.storage {
   match /b/{bucket}/o {
     match /profile_photos/{uid}/{fileName} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null
+      // Split the same way as chat_audio below: `request.resource` is null
+      // on a delete, so folding delete into one `allow write` with these
+      // same size/type checks would silently deny it.
+      allow create, update: if request.auth != null
         && request.auth.uid == uid
         && request.resource.size < 10 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Chat voice notes (see FirebaseStorageUploader.uploadChatAudio).
+    // conversationId is always `([uidA, uidB]..sort()).join('_')` (see
+    // ChatRepository.conversationId) — checking membership by splitting it
+    // avoids a cross-service firestore.get() call AND the ordering hazard
+    // that would create: the very first message in a new conversation
+    // uploads its audio before the Firestore conversation doc necessarily
+    // exists, so a rule that depended on reading that doc could 403 a
+    // legitimate first voice note.
+    match /chat_audio/{conversationId}/{fileName} {
+      function isParticipant() {
+        return request.auth != null && request.auth.uid in conversationId.split('_');
+      }
+      allow read: if isParticipant();
+      // Split from `delete` below: `request.resource` (what's being
+      // checked here) is null on a delete request, so a single combined
+      // `allow write` with these same conditions would deny every delete —
+      // caught by this file's own test, not assumed.
+      allow create, update: if isParticipant()
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('audio/.*');
+      allow delete: if isParticipant();
     }
   }
 }

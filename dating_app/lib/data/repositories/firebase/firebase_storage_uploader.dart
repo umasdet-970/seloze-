@@ -18,4 +18,18 @@ class FirebaseStorageUploader {
     await ref.putFile(file, SettableMetadata(contentType: 'image/jpeg'));
     return ref.getDownloadURL();
   }
+
+  /// Uploads a recorded chat voice note to
+  /// `chat_audio/{conversationId}/{senderId}_{ts}.m4a` — namespaced by
+  /// conversation (not by uploader) so `cleanupUserOnDelete` can sweep a
+  /// deleted user's clips by conversation id alongside the Firestore
+  /// message docs that reference them (see functions/src/index.ts's
+  /// "conversations" step — Storage files aren't removed by deleting the
+  /// Firestore docs that point to them, same as profile photos below).
+  Future<String> uploadChatAudio(String conversationId, String senderId, File file) async {
+    final filename = '${senderId}_${DateTime.now().millisecondsSinceEpoch}.m4a';
+    final ref = _storage.ref('chat_audio/$conversationId/$filename');
+    await ref.putFile(file, SettableMetadata(contentType: 'audio/mp4'));
+    return ref.getDownloadURL();
+  }
 }

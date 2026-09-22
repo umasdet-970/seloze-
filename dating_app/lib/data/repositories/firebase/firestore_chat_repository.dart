@@ -55,6 +55,8 @@ class FirestoreChatRepository implements ChatRepository {
           senderId: data['senderId'] as String,
           text: data['text'] as String?,
           imageUrl: data['imageUrl'] as String?,
+          audioUrl: data['audioUrl'] as String?,
+          audioDurationSec: (data['audioDurationSec'] as num?)?.toInt(),
           sentAt: (data['sentAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
           read: data['read'] as bool? ?? false,
         );
@@ -151,6 +153,21 @@ class FirestoreChatRepository implements ChatRepository {
     await _firestore.collection('conversations').doc(conversationId).collection('messages').add({
       'senderId': senderId,
       'imageUrl': imageUrl,
+      'sentAt': FieldValue.serverTimestamp(),
+      'read': false,
+    });
+  }
+
+  @override
+  Future<void> sendAudio(String conversationId, String senderId, String audioUrl, {required int durationSec}) async {
+    if (!_messageLimiter.allow(senderId)) {
+      throw RateLimitException("You're sending messages too fast. Please slow down.");
+    }
+    await _ensureConversationDoc(conversationId, senderId);
+    await _firestore.collection('conversations').doc(conversationId).collection('messages').add({
+      'senderId': senderId,
+      'audioUrl': audioUrl,
+      'audioDurationSec': durationSec,
       'sentAt': FieldValue.serverTimestamp(),
       'read': false,
     });

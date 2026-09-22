@@ -159,6 +159,11 @@ export const cleanupUserOnDelete = functionsV1.auth.user().onDelete(async (user)
     const db = admin.firestore();
     const convos = await db.collection("conversations").where("participants", "array-contains", uid).get();
     for (const convo of convos.docs) {
+      // Voice notes (chat_audio/{conversationId}/...) live in Storage, not
+      // Firestore — recursiveDelete below only removes the message docs
+      // that reference them. Same leak recursiveDelete alone would have
+      // for profile photos (see the step below).
+      await admin.storage().bucket().deleteFiles({ prefix: `chat_audio/${convo.id}/`, force: true });
       await db.recursiveDelete(convo.ref);
     }
   });

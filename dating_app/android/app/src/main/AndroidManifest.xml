@@ -29,6 +29,9 @@
          Coarse is enough for "how many km away" — fine isn't requested,
          since this app has no use for street-level precision. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <!-- Chat voice notes (record package) — requested at the moment the
+         user first taps the mic button, not on app launch. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 
     <application
         android:label="Seloze"

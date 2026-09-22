@@ -25,6 +25,12 @@ abstract class ChatRepository {
 
   Future<void> sendText(String conversationId, String senderId, String text);
   Future<void> sendImage(String conversationId, String senderId, String imageUrl);
+
+  /// [durationSec] is stored alongside the clip so the bubble can show a
+  /// length before playback, same as every voice-note UI (Bumble/Hinge/
+  /// WhatsApp) — re-deriving it from the audio file on every render would
+  /// mean decoding it just to show a number.
+  Future<void> sendAudio(String conversationId, String senderId, String audioUrl, {required int durationSec});
   Future<void> markRead(String conversationId, String readerUid);
   Future<void> hideConversation(String conversationId, String forUid);
 }
@@ -128,6 +134,24 @@ class MockChatRepository implements ChatRepository {
     _appendMessage(
       conversationId,
       ChatMessage(id: '${_nextId++}', senderId: senderId, imageUrl: imageUrl, sentAt: DateTime.now()),
+    );
+    unawaited(_simulateReply(conversationId, senderId));
+  }
+
+  @override
+  Future<void> sendAudio(String conversationId, String senderId, String audioUrl, {required int durationSec}) async {
+    if (!_messageLimiter.allow(senderId)) {
+      throw RateLimitException("You're sending messages too fast. Please slow down.");
+    }
+    _appendMessage(
+      conversationId,
+      ChatMessage(
+        id: '${_nextId++}',
+        senderId: senderId,
+        audioUrl: audioUrl,
+        audioDurationSec: durationSec,
+        sentAt: DateTime.now(),
+      ),
     );
     unawaited(_simulateReply(conversationId, senderId));
   }
