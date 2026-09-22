@@ -115,7 +115,41 @@ class _ProfileDetails extends StatelessWidget {
             children: [for (final interest in profile.interests) Chip(label: Text(interest))],
           ),
         ],
+        for (final prompt in profile.prompts) ...[
+          const SizedBox(height: 16),
+          _PromptCard(prompt: prompt),
+        ],
       ],
+    );
+  }
+}
+
+/// One answered prompt, shown Hinge-style: the question small and muted,
+/// the member's own answer large underneath.
+class _PromptCard extends StatelessWidget {
+  final ProfilePrompt prompt;
+  const _PromptCard({required this.prompt});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            prompt.question,
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 6),
+          Text(prompt.answer, style: const TextStyle(fontSize: 16, height: 1.3)),
+        ],
+      ),
     );
   }
 }

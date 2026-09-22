@@ -1,3 +1,21 @@
+/// One answered profile prompt (Hinge-style: "A perfect first date looks
+/// like..." -> the member's own answer) — see
+/// core/constants/profile_prompts.dart for the curated question list.
+/// Optional and additive to `bio`, not a replacement for it.
+class ProfilePrompt {
+  final String question;
+  final String answer;
+
+  const ProfilePrompt({required this.question, required this.answer});
+
+  factory ProfilePrompt.fromMap(Map<String, dynamic> map) => ProfilePrompt(
+        question: map['question'] as String? ?? '',
+        answer: map['answer'] as String? ?? '',
+      );
+
+  Map<String, dynamic> toMap() => {'question': question, 'answer': answer};
+}
+
 /// Core profile model. Mirrors what will eventually live in the
 /// `users/{uid}` Firestore document. Keeping this as a plain Dart class
 /// (not tied to Firestore) means the UI never talks to Firestore directly -
@@ -22,6 +40,7 @@ class Profile {
   final double distanceKm;
   final bool isOnline;
   final bool isVerified;
+  final List<ProfilePrompt> prompts;
 
   const Profile({
     required this.id,
@@ -39,6 +58,7 @@ class Profile {
     required this.distanceKm,
     this.isOnline = false,
     this.isVerified = false,
+    this.prompts = const [],
   });
 
   factory Profile.fromMap(String id, Map<String, dynamic> map) {
@@ -58,6 +78,9 @@ class Profile {
       distanceKm: (map['distanceKm'] as num?)?.toDouble() ?? 0,
       isOnline: map['isOnline'] as bool? ?? false,
       isVerified: map['isVerified'] as bool? ?? false,
+      prompts: (map['prompts'] as List? ?? const [])
+          .map((p) => ProfilePrompt.fromMap(Map<String, dynamic>.from(p as Map)))
+          .toList(),
     );
   }
 
@@ -76,6 +99,7 @@ class Profile {
         'distanceKm': distanceKm,
         'isOnline': isOnline,
         'isVerified': isVerified,
+        'prompts': prompts.map((p) => p.toMap()).toList(),
       };
 
   Profile copyWith({
@@ -93,6 +117,7 @@ class Profile {
     double? distanceKm,
     bool? isOnline,
     bool? isVerified,
+    List<ProfilePrompt>? prompts,
   }) {
     return Profile(
       id: id,
@@ -110,6 +135,7 @@ class Profile {
       distanceKm: distanceKm ?? this.distanceKm,
       isOnline: isOnline ?? this.isOnline,
       isVerified: isVerified ?? this.isVerified,
+      prompts: prompts ?? this.prompts,
     );
   }
 }

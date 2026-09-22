@@ -21,6 +21,7 @@ import '../widgets/action_buttons.dart';
 import '../widgets/filter_sheet.dart';
 import '../widgets/profile_card.dart';
 import '../widgets/profile_details_sheet.dart';
+import '../widgets/profile_grid_tile.dart';
 
 class DiscoverScreen extends ConsumerStatefulWidget {
   const DiscoverScreen({super.key});
@@ -38,6 +39,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
     final selectedTab = ref.watch(discoverTabProvider);
     final (used, limit) = ref.watch(discoveryQuotaProvider);
     final tier = ref.watch(subscriptionTierProvider);
+    final viewMode = ref.watch(discoverViewModeProvider);
 
     return SafeArea(
       child: Column(
@@ -63,6 +65,26 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
                     onInvite: () => shareInvite(ref),
                     canWatchAd: kUseRewardedAds && adBonusLeft > 0,
                     onWatchAd: () => _watchAdForBonus(context, ref),
+                  );
+                }
+                if (viewMode == DiscoverViewMode.grid) {
+                  return GridView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
+                      childAspectRatio: 0.72,
+                    ),
+                    itemCount: profiles.length,
+                    itemBuilder: (context, index) {
+                      final profile = profiles[index];
+                      return ProfileGridTile(
+                        profile: profile,
+                        onTap: () => showProfileDetailsSheet(context, profile),
+                        onLike: () => _handleGridLike(profile),
+                      );
+                    },
                   );
                 }
                 return Padding(
@@ -95,12 +117,14 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
               error: (err, _) => Center(child: Text('Something went wrong: $err')),
             ),
           ),
-          const SizedBox(height: 16),
-          ActionButtons(
-            onPass: () => _swiperController.swipe(CardSwiperDirection.left),
-            onLike: () => _swiperController.swipe(CardSwiperDirection.right),
-            onSuperLike: () => _swiperController.swipe(CardSwiperDirection.top),
-          ),
+          if (viewMode == DiscoverViewMode.swipe) ...[
+            const SizedBox(height: 16),
+            ActionButtons(
+              onPass: () => _swiperController.swipe(CardSwiperDirection.left),
+              onLike: () => _swiperController.swipe(CardSwiperDirection.right),
+              onSuperLike: () => _swiperController.swipe(CardSwiperDirection.top),
+            ),
+          ],
           const SizedBox(height: 12),
         ],
       ),
@@ -128,6 +152,15 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
       }
+    }
+  }
+
+  void _handleGridLike(Profile profile) async {
+    HapticFeedback.mediumImpact();
+    final matched = await ref.read(discoverFeedProvider.notifier).likeProfile(profile, source: 'grid');
+    if (matched && mounted) {
+      HapticFeedback.heavyImpact();
+      _showMatchDialog(profile.name);
     }
   }
 
@@ -247,6 +280,20 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
                 color: tier == SubscriptionTier.premium ? AppColors.primary : onSurfaceVariant,
               ),
             ),
+          ),
+          Consumer(
+            builder: (context, ref, _) {
+              final mode = ref.watch(discoverViewModeProvider);
+              return IconButton(
+                tooltip: mode == DiscoverViewMode.swipe ? 'Switch to grid view' : 'Switch to swipe view',
+                icon: Icon(mode == DiscoverViewMode.swipe ? Icons.grid_view_rounded : Icons.style_outlined),
+                onPressed: () {
+                  HapticFeedback.selectionClick();
+                  ref.read(discoverViewModeProvider.notifier).state =
+                      mode == DiscoverViewMode.swipe ? DiscoverViewMode.grid : DiscoverViewMode.swipe;
+                },
+              );
+            },
           ),
           Consumer(
             builder: (context, ref, _) {

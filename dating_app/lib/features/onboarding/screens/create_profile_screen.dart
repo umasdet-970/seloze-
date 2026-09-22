@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/config/backend_config.dart';
 import '../../../core/constants/interests.dart';
+import '../../../core/constants/profile_prompts.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/dating_preferences.dart';
 import '../../../data/models/profile.dart';
@@ -20,6 +21,15 @@ import '../providers/onboarding_providers.dart';
 import '../widgets/location_consent_tile.dart';
 
 const _genderOptions = ['Woman', 'Man', 'Non-binary', 'Other'];
+
+/// One in-progress prompt answer in the wizard — a question paired with its
+/// own TextEditingController so each entry's field can be edited
+/// independently without rebuilding the whole list on every keystroke.
+class _PromptDraft {
+  String question;
+  final TextEditingController controller;
+  _PromptDraft(this.question, {String answer = ''}) : controller = TextEditingController(text: answer);
+}
 
 /// Core user flow steps 3-5 (spec section 23): create profile, upload
 /// photos, set location & preferences — one gate before Discover unlocks.
@@ -45,6 +55,7 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
   String? _gender;
   final Set<String> _interests = {};
   final List<String> _photoUrls = [];
+  final List<_PromptDraft> _promptDrafts = [];
 
   DatingIntention _intention = DatingIntention.notSure;
   RelationshipPreference _relationshipPreference = RelationshipPreference.notSure;
@@ -100,6 +111,7 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
         _gender = profile.gender.isNotEmpty ? profile.gender : null;
         _interests.addAll(profile.interests);
         _photoUrls.addAll(profile.photoUrls);
+        _promptDrafts.addAll(profile.prompts.map((p) => _PromptDraft(p.question, answer: p.answer)));
         _intention = preferences.intention;
         _relationshipPreference = preferences.relationshipPreference;
         _showMe = preferences.showMe;
@@ -138,6 +150,9 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
     _educationController.dispose();
     _cityController.dispose();
     _countryController.dispose();
+    for (final draft in _promptDrafts) {
+      draft.controller.dispose();
+    }
     super.dispose();
   }
 
@@ -158,10 +173,22 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
     }
 
     if (_step == 0) {
-      final moderation = await ref.read(moderationRepositoryProvider).moderateText(_bioController.text);
-      if (!moderation.allowed) {
-        setState(() => _error = moderation.reason);
+      final moderation = ref.read(moderationRepositoryProvider);
+      final bioCheck = await moderation.moderateText(_bioController.text);
+      if (!bioCheck.allowed) {
+        setState(() => _error = bioCheck.reason);
         return;
+      }
+      // Same gate as the bio — a prompt answer is just as visible to other
+      // members and just as able to carry abuse/spam if it went unchecked.
+      for (final draft in _promptDrafts) {
+        final answer = draft.controller.text.trim();
+        if (answer.isEmpty) continue;
+        final promptCheck = await moderation.moderateText(answer);
+        if (!promptCheck.allowed) {
+          setState(() => _error = promptCheck.reason);
+          return;
+        }
       }
     }
 
@@ -224,6 +251,11 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
         interests: _interests.toList(),
         city: _cityController.text.trim(),
         country: _countryController.text.trim(),
+        prompts: [
+          for (final draft in _promptDrafts)
+            if (draft.controller.text.trim().isNotEmpty)
+              ProfilePrompt(question: draft.question, answer: draft.controller.text.trim()),
+        ],
       );
       final preferences = DatingPreferences(
         intention: _intention,
@@ -552,7 +584,88 @@ class _CreateProfileScreenState extends ConsumerState<CreateProfileScreen> {
             }).toList(),
           ),
           const SizedBox(height: 24),
+          _buildPromptsSection(),
+          const SizedBox(height: 24),
         ],
+      ),
+    );
+  }
+
+  /// Optional Hinge-style prompts (spec: up to kMaxProfilePrompts, each a
+  /// picked question + free-text answer) — see _PromptDraft and
+  /// core/constants/profile_prompts.dart. Never required to advance, unlike
+  /// name/gender/bio above.
+  Widget _buildPromptsSection() {
+    final usedQuestions = _promptDrafts.map((d) => d.question).toSet();
+    final availableQuestions = kProfilePromptQuestions.where((q) => !usedQuestions.contains(q)).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Prompts (optional)', style: TextStyle(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 4),
+        const Text(
+          'Answer up to $kMaxProfilePrompts to help you stand out and give matches something to reply to.',
+          style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+        ),
+        const SizedBox(height: 12),
+        for (var i = 0; i < _promptDrafts.length; i++) _buildPromptCard(i, availableQuestions),
+        if (_promptDrafts.length < kMaxProfilePrompts && availableQuestions.isNotEmpty)
+          OutlinedButton.icon(
+            onPressed: () => setState(() => _promptDrafts.add(_PromptDraft(availableQuestions.first))),
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Add a prompt'),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildPromptCard(int index, List<String> availableQuestions) {
+    final draft = _promptDrafts[index];
+    // The dropdown must always include the currently-selected question even
+    // if it's not in `availableQuestions` (every OTHER draft's pick is
+    // excluded from that list so the same question can't be picked twice).
+    final options = {draft.question, ...availableQuestions}.toList();
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: draft.question,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Prompt', isDense: true),
+                    items: [
+                      for (final q in options) DropdownMenuItem(value: q, child: Text(q, overflow: TextOverflow.ellipsis)),
+                    ],
+                    onChanged: (v) => setState(() => draft.question = v ?? draft.question),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 18),
+                  tooltip: 'Remove prompt',
+                  onPressed: () => setState(() {
+                    draft.controller.dispose();
+                    _promptDrafts.removeAt(index);
+                  }),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            TextField(
+              controller: draft.controller,
+              maxLines: 2,
+              maxLength: 150,
+              decoration: const InputDecoration(hintText: 'Your answer', border: OutlineInputBorder()),
+            ),
+          ],
+        ),
       ),
     );
   }

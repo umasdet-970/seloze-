@@ -35,6 +35,13 @@ enum DiscoverTab { forYou, nearby, newProfiles, online }
 
 final discoverTabProvider = StateProvider<DiscoverTab>((ref) => DiscoverTab.forYou);
 
+/// Swipe (default, card-by-card) vs Grid (Grindr-style thumbnail browse —
+/// scan many profiles at once, tap one to open its full details). Purely a
+/// display preference; both modes share the same feed/quota.
+enum DiscoverViewMode { swipe, grid }
+
+final discoverViewModeProvider = StateProvider<DiscoverViewMode>((ref) => DiscoverViewMode.swipe);
+
 /// The signed-in user's saved dating preferences (age range, distance,
 /// "show me" — set in onboarding / Edit profile). Null until loaded, or if
 /// they can't be fetched — callers fall back to the built-in defaults.
@@ -179,21 +186,22 @@ class DiscoverFeedNotifier extends AsyncNotifier<List<Profile>> {
     }
   }
 
-  void _removeTop() {
+  void _removeId(String id) {
     final current = state.value ?? [];
-    if (current.isEmpty) return;
-    state = AsyncData(current.sublist(1));
+    state = AsyncData(current.where((p) => p.id != id).toList());
   }
 
-  Future<bool> likeTop() async {
-    final current = state.value ?? [];
-    if (current.isEmpty) return false;
-    final target = current.first;
+  /// Swipe mode always acts on the card on top. Grid mode (see
+  /// discoverViewModeProvider) lets the user tap any profile in the batch,
+  /// not just the first, so [likeTop]/[passTop] are thin wrappers over
+  /// these — both remove [target] from wherever it sits in the current
+  /// list, not just position 0.
+  Future<bool> likeProfile(Profile target, {required String source}) async {
     final social = ref.read(socialRepositoryProvider);
     final uid = ref.read(currentUserIdProvider);
     final result = await social.like(uid, target.id);
-    _removeTop();
-    ref.read(analyticsRepositoryProvider).logEvent('like', params: {'source': 'discover'});
+    _removeId(target.id);
+    ref.read(analyticsRepositoryProvider).logEvent('like', params: {'source': source});
     if (result.matched) {
       ref.read(notificationRepositoryProvider).add(
             uid,
@@ -206,15 +214,24 @@ class DiscoverFeedNotifier extends AsyncNotifier<List<Profile>> {
     return result.matched;
   }
 
-  Future<void> passTop() async {
-    final current = state.value ?? [];
-    if (current.isEmpty) return;
-    final target = current.first;
+  Future<void> passProfile(Profile target, {required String source}) async {
     final social = ref.read(socialRepositoryProvider);
     final uid = ref.read(currentUserIdProvider);
     await social.pass(uid, target.id);
-    _removeTop();
-    ref.read(analyticsRepositoryProvider).logEvent('pass');
+    _removeId(target.id);
+    ref.read(analyticsRepositoryProvider).logEvent('pass', params: {'source': source});
+  }
+
+  Future<bool> likeTop() async {
+    final current = state.value ?? [];
+    if (current.isEmpty) return false;
+    return likeProfile(current.first, source: 'discover');
+  }
+
+  Future<void> passTop() async {
+    final current = state.value ?? [];
+    if (current.isEmpty) return;
+    await passProfile(current.first, source: 'discover');
   }
 
   Future<void> refresh() async {
