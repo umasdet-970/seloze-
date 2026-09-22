@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:connect_dating_app/core/constants/profile_prompts.dart';
@@ -70,13 +71,15 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) => Scaffold(
-              body: Center(
-                child: ElevatedButton(
-                  onPressed: () => showProfileDetailsSheet(context, profile),
-                  child: const Text('open'),
+        ProviderScope(
+          child: MaterialApp(
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: Center(
+                  child: ElevatedButton(
+                    onPressed: () => showProfileDetailsSheet(context, profile),
+                    child: const Text('open'),
+                  ),
                 ),
               ),
             ),
@@ -105,13 +108,15 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) => Scaffold(
-              body: Center(
-                child: ElevatedButton(
-                  onPressed: () => showProfileDetailsSheet(context, profile),
-                  child: const Text('open'),
+        ProviderScope(
+          child: MaterialApp(
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: Center(
+                  child: ElevatedButton(
+                    onPressed: () => showProfileDetailsSheet(context, profile),
+                    child: const Text('open'),
+                  ),
                 ),
               ),
             ),

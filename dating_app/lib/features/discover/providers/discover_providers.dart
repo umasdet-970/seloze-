@@ -245,6 +245,31 @@ final discoverFeedProvider =
   DiscoverFeedNotifier.new,
 );
 
+/// "Standouts" (spec: Hinge-style curated picks) — verified profiles with a
+/// complete-enough profile (photo, bio, at least one answered prompt) drawn
+/// from the current Discover batch, shown in their own row above the main
+/// feed. Deliberately a filter over the same batch discoverFeedProvider
+/// already loaded/paid quota for, not a separate fetch — a Standout is
+/// still a normal profile in the regular feed underneath, just surfaced
+/// twice for visibility, exactly like liking one from either place still
+/// works the same.
+final standoutProfilesProvider = Provider<List<Profile>>((ref) {
+  final profiles = ref.watch(discoverFeedProvider).valueOrNull ?? const [];
+  return selectStandouts(profiles);
+});
+
+/// The actual Standouts filter, pulled out of the provider above so it's
+/// unit-testable on its own — building a real ProviderContainer for
+/// [discoverFeedProvider] means standing up its whole dependency chain
+/// (auth, preferences, referrals, billing...), which is more than this
+/// one filter warrants exercising just to test itself.
+List<Profile> selectStandouts(List<Profile> profiles) {
+  return profiles
+      .where((p) => p.isVerified && p.bio.isNotEmpty && p.photoUrls.isNotEmpty && p.prompts.isNotEmpty)
+      .take(10)
+      .toList();
+}
+
 final _socialTickProvider = StreamProvider<void>((ref) => ref.watch(socialRepositoryProvider).changes());
 
 /// Extra daily discoveries earned today from watching rewarded ads (see

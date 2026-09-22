@@ -49,8 +49,9 @@ class FirestoreSocialRepository implements SocialRepository {
   final Map<String, Set<String>> _blockedMeCache = {};
   final Map<String, Set<String>> _reportedCache = {};
   final Map<String, List<String>> _likesReceivedCache = {};
+  final Map<String, Set<String>> _roseSenderCache = {};
   final Map<String, List<MatchRecord>> _matchesCache = {};
-  final Map<String, ({String date, Set<String> shownIds, int adBonusCount})> _quotaCache = {};
+  final Map<String, ({String date, Set<String> shownIds, int adBonusCount, int roseCount})> _quotaCache = {};
   final Set<String> _listening = {};
 
   void _notify() => _controller.add(null);
@@ -84,6 +85,7 @@ class FirestoreSocialRepository implements SocialRepository {
 
     _userSub(uid, 'likesReceived').snapshots().listenSafely((snap) {
       _likesReceivedCache[uid] = snap.docs.map((d) => d.id).toList();
+      _roseSenderCache[uid] = snap.docs.where((d) => d.data()['isRose'] == true).map((d) => d.id).toSet();
       _notify();
     });
 
@@ -99,7 +101,8 @@ class FirestoreSocialRepository implements SocialRepository {
       final date = data?['date'] as String? ?? '';
       final ids = Set<String>.from(data?['shownIds'] as List? ?? const []);
       final adBonusCount = (data?['adBonusCount'] as num?)?.toInt() ?? 0;
-      _quotaCache[uid] = (date: date, shownIds: ids, adBonusCount: adBonusCount);
+      final roseCount = (data?['roseCount'] as num?)?.toInt() ?? 0;
+      _quotaCache[uid] = (date: date, shownIds: ids, adBonusCount: adBonusCount, roseCount: roseCount);
       _notify();
     });
   }
@@ -135,6 +138,12 @@ class FirestoreSocialRepository implements SocialRepository {
   List<String> receivedLikeIds(String uid) {
     _ensureListening(uid);
     return List.unmodifiable(_likesReceivedCache[uid] ?? const []);
+  }
+
+  @override
+  Set<String> roseSenderIds(String uid) {
+    _ensureListening(uid);
+    return Set.unmodifiable(_roseSenderCache[uid] ?? const {});
   }
 
   @override
@@ -174,6 +183,7 @@ class FirestoreSocialRepository implements SocialRepository {
     if (current.contains(profileId)) return;
     final updated = {...current, profileId};
     final adBonusCount = _adBonusTodayRaw(uid);
+    final roseCount = _roseTodayRaw(uid);
     // Update the cache immediately (synchronous callers read it right
     // after calling this), then persist in the background — matches the
     // interface's fire-and-forget (non-Future) contract. `catchError`
@@ -181,14 +191,16 @@ class FirestoreSocialRepository implements SocialRepository {
     // (i.e. every swipe), so it's the highest-frequency write in the
     // app — a transient failure without a handler would be the most
     // likely source of unhandled zone errors under real-world flakiness.
-    // Carries the ad-bonus count along (rather than a partial `update`) so
-    // this and recordAdBonusEarned agree on what "today's quota doc" is.
-    _quotaCache[uid] = (date: today, shownIds: updated, adBonusCount: adBonusCount);
+    // Carries the ad-bonus/rose counts along (rather than a partial
+    // `update`) so every writer of this doc agrees on what "today's
+    // quota doc" is.
+    _quotaCache[uid] = (date: today, shownIds: updated, adBonusCount: adBonusCount, roseCount: roseCount);
     unawaited(
       _firestore.collection('users').doc(uid).collection('private').doc('quota').set({
         'date': today,
         'shownIds': updated.toList(),
         'adBonusCount': adBonusCount,
+        'roseCount': roseCount,
       }).catchError((_) {}),
     );
   }
@@ -203,20 +215,61 @@ class FirestoreSocialRepository implements SocialRepository {
     final current = _adBonusTodayRaw(uid);
     if (current >= kMaxAdBonusPerDay) return;
     final shownIds = _shownTodayRaw(uid);
+    final roseCount = _roseTodayRaw(uid);
     final updated = current + 1;
-    _quotaCache[uid] = (date: today, shownIds: shownIds, adBonusCount: updated);
+    _quotaCache[uid] = (date: today, shownIds: shownIds, adBonusCount: updated, roseCount: roseCount);
     unawaited(
       _firestore.collection('users').doc(uid).collection('private').doc('quota').set({
         'date': today,
         'shownIds': shownIds.toList(),
         'adBonusCount': updated,
+        'roseCount': roseCount,
       }).catchError((_) {}),
     );
     _notify();
   }
 
   @override
-  Future<LikeResult> like(String uid, String targetId) async {
+  Future<LikeResult> like(String uid, String targetId) => _likeInternal(uid, targetId, isRose: false);
+
+  @override
+  Future<LikeResult> sendRose(String uid, String targetId) async {
+    final result = await _likeInternal(uid, targetId, isRose: true);
+    // Only counts against the daily rose quota if it actually created a
+    // new pending like — an instant match doesn't need the "stand out in
+    // their Likes grid" effect a rose exists for (see MockSocialRepository
+    // for the same reasoning).
+    if (!result.matched) {
+      final today = _todayKey();
+      final current = _roseTodayRaw(uid);
+      final updated = current + 1;
+      final shownIds = _shownTodayRaw(uid);
+      final adBonusCount = _adBonusTodayRaw(uid);
+      _quotaCache[uid] = (date: today, shownIds: shownIds, adBonusCount: adBonusCount, roseCount: updated);
+      unawaited(
+        _firestore.collection('users').doc(uid).collection('private').doc('quota').set({
+          'date': today,
+          'shownIds': shownIds.toList(),
+          'adBonusCount': adBonusCount,
+          'roseCount': updated,
+        }).catchError((_) {}),
+      );
+      _notify();
+    }
+    return result;
+  }
+
+  int _roseTodayRaw(String uid) {
+    _ensureListening(uid);
+    final quota = _quotaCache[uid];
+    if (quota == null || quota.date != _todayKey()) return 0;
+    return quota.roseCount;
+  }
+
+  @override
+  int roseUsedToday(String uid) => _roseTodayRaw(uid);
+
+  Future<LikeResult> _likeInternal(String uid, String targetId, {required bool isRose}) async {
     if (!_swipeLimiter.allow(uid)) {
       throw RateLimitException("You're swiping too fast — please slow down.");
     }
@@ -245,6 +298,7 @@ class FirestoreSocialRepository implements SocialRepository {
         transaction.set(_userSub(targetId, 'likesReceived').doc(uid), {
           'createdAt': FieldValue.serverTimestamp(),
           'fromUserId': uid,
+          'isRose': isRose,
         });
         return false;
       }

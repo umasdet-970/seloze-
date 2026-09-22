@@ -219,13 +219,15 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: Center(
-              child: ElevatedButton(
-                onPressed: () => showProfileDetailsSheet(context, profile),
-                child: const Text('open'),
+      ProviderScope(
+        child: MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: Center(
+                child: ElevatedButton(
+                  onPressed: () => showProfileDetailsSheet(context, profile),
+                  child: const Text('open'),
+                ),
               ),
             ),
           ),

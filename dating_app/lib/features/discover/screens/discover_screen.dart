@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
@@ -46,6 +47,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
         children: [
           _buildHeader(context, used, limit, tier),
           const SizedBox(height: 12),
+          _StandoutsRow(profiles: ref.watch(standoutProfilesProvider)),
           _buildTabChips(context, selectedTab),
           if (kUseAds && tier == SubscriptionTier.free) ...[
             const SizedBox(height: 12),
@@ -361,6 +363,89 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
             ),
           );
         }).toList(),
+      ),
+    );
+  }
+}
+
+/// Standouts (see standoutProfilesProvider): a horizontal row of curated
+/// profiles, hidden entirely once there's nothing to show rather than
+/// rendering an empty section header — a fresh/small user base will often
+/// have none yet, which is expected, not an error state.
+class _StandoutsRow extends StatelessWidget {
+  final List<Profile> profiles;
+  const _StandoutsRow({required this.profiles});
+
+  @override
+  Widget build(BuildContext context) {
+    if (profiles.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                Icon(Icons.star, color: AppColors.primary, size: 16),
+                SizedBox(width: 4),
+                Text('Standouts today', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 96,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              itemCount: profiles.length,
+              itemBuilder: (context, index) {
+                final profile = profiles[index];
+                return Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: GestureDetector(
+                    onTap: () => showProfileDetailsSheet(context, profile),
+                    child: Column(
+                      children: [
+                        Stack(
+                          children: [
+                            CircleAvatar(
+                              radius: 32,
+                              backgroundImage:
+                                  profile.photoUrls.isNotEmpty ? CachedNetworkImageProvider(profile.photoUrls.first) : null,
+                              child: profile.photoUrls.isEmpty ? const Icon(Icons.person) : null,
+                            ),
+                            const Positioned(
+                              right: 0,
+                              bottom: 0,
+                              child: CircleAvatar(
+                                radius: 9,
+                                backgroundColor: AppColors.primary,
+                                child: Icon(Icons.star, size: 11, color: Colors.white),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        SizedBox(
+                          width: 64,
+                          child: Text(
+                            profile.name,
+                            style: const TextStyle(fontSize: 11),
+                            textAlign: TextAlign.center,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

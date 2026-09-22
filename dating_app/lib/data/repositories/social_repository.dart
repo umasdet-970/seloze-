@@ -68,6 +68,22 @@ abstract class SocialRepository {
   Future<LikeResult> like(String uid, String targetId);
   Future<void> pass(String uid, String targetId);
 
+  /// A Like that always reveals the sender to [targetId] by name — bypasses
+  /// the "who liked you" blur/paywall for this one profile even if
+  /// [targetId] is Free tier (see LikesScreen, rose_config.dart). Same
+  /// match semantics as [like]: if [targetId] already liked [uid], this is
+  /// an instant match.
+  Future<LikeResult> sendRose(String uid, String targetId);
+
+  /// How many roses [uid] has sent today (resets at local midnight, same
+  /// as [adBonusUsedToday]) — compared against roseLimitFor(tier).
+  int roseUsedToday(String uid);
+
+  /// Ids among [receivedLikeIds] that were sent as a rose, not a plain
+  /// like — LikesScreen shows these unblurred regardless of the viewer's
+  /// tier.
+  Set<String> roseSenderIds(String uid);
+
   Future<void> unmatch(String uid, String otherId);
 
   Future<void> block(String uid, String targetId);
@@ -88,6 +104,8 @@ class MockSocialRepository implements SocialRepository {
   final Map<String, DateTime> _lastDiscoveryDate = {};
   final Map<String, Set<String>> _shownToday = {};
   final Map<String, int> _adBonusToday = {};
+  final Map<String, int> _roseToday = {};
+  final Map<String, Set<String>> _roseSenders = {};
   final Set<String> _seeded = {};
   final _reportLimiter = RateLimiter(maxEvents: 5, window: const Duration(minutes: 10));
   // Bot detection (spec section 12/19): sustained swiping faster than a
@@ -148,6 +166,7 @@ class MockSocialRepository implements SocialRepository {
     if (last == null || !_isToday(last)) {
       _shownToday[uid] = {};
       _adBonusToday[uid] = 0;
+      _roseToday[uid] = 0;
       _lastDiscoveryDate[uid] = DateTime.now();
     }
   }
@@ -191,7 +210,20 @@ class MockSocialRepository implements SocialRepository {
   }
 
   @override
-  Future<LikeResult> like(String uid, String targetId) async {
+  Future<LikeResult> like(String uid, String targetId) => _likeInternal(uid, targetId, isRose: false);
+
+  @override
+  Future<LikeResult> sendRose(String uid, String targetId) async {
+    _resetIfNewDay(uid);
+    final result = await _likeInternal(uid, targetId, isRose: true);
+    // Only counts against the daily rose quota if it actually sent a new
+    // pending like — an instant match (they'd already liked uid) doesn't
+    // need the "stand out in their Likes grid" effect a rose exists for.
+    if (!result.matched) _roseToday[uid] = (_roseToday[uid] ?? 0) + 1;
+    return result;
+  }
+
+  Future<LikeResult> _likeInternal(String uid, String targetId, {required bool isRose}) async {
     if (!_swipeLimiter.allow(uid)) {
       throw RateLimitException("You're swiping too fast — please slow down.");
     }
@@ -205,14 +237,25 @@ class MockSocialRepository implements SocialRepository {
       (_matches[uid] ??= []).add(MatchRecord(otherUserId: targetId, matchedAt: now));
       (_matches[targetId] ??= []).add(MatchRecord(otherUserId: uid, matchedAt: now));
       _likesReceived[uid]?.remove(targetId);
+      _roseSenders[uid]?.remove(targetId);
       _notify();
       return const LikeResult(matched: true);
     }
 
     (_likesReceived[targetId] ??= {}).add(uid);
+    if (isRose) (_roseSenders[targetId] ??= {}).add(uid);
     _notify();
     return const LikeResult(matched: false);
   }
+
+  @override
+  int roseUsedToday(String uid) {
+    _resetIfNewDay(uid);
+    return _roseToday[uid] ?? 0;
+  }
+
+  @override
+  Set<String> roseSenderIds(String uid) => Set.unmodifiable(_roseSenders[uid] ?? const {});
 
   @override
   Future<void> pass(String uid, String targetId) async {

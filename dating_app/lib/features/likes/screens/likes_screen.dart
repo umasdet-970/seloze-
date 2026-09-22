@@ -26,6 +26,7 @@ class LikesScreen extends ConsumerWidget {
     final likesAsync = ref.watch(receivedLikesProvider);
     final tier = ref.watch(subscriptionTierProvider);
     final isPremium = tier == SubscriptionTier.premium;
+    final roseSenderIds = ref.watch(roseSenderIdsProvider);
     final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
 
     return SafeArea(
@@ -46,65 +47,90 @@ class LikesScreen extends ConsumerWidget {
                       child: Text('No likes yet — keep swiping in Discover!', style: TextStyle(color: onSurfaceVariant)),
                     );
                   }
-                  final grid = GridView.builder(
-                    itemCount: profiles.length,
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      mainAxisSpacing: 12,
-                      crossAxisSpacing: 12,
-                      childAspectRatio: 0.72,
-                    ),
-                    itemBuilder: (context, index) => _LikeTile(
-                      profile: profiles[index],
-                      interactive: isPremium,
-                    ),
-                  );
 
-                  if (isPremium) return grid;
+                  // Roses always reveal the sender, even to a Free viewer —
+                  // that's the whole point of spending one (see
+                  // core/config/rose_config.dart) — so they're excluded
+                  // from the blurred/locked section below.
+                  final roseSenders = profiles.where((p) => roseSenderIds.contains(p.id)).toList();
+                  final others = profiles.where((p) => !roseSenderIds.contains(p.id)).toList();
 
-                  return Stack(
-                    children: [
-                      Positioned.fill(
-                        child: ImageFiltered(
-                          imageFilter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                          child: grid,
+                  Widget tileGrid(List<Profile> list, {required bool interactive}) => GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: list.length,
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          mainAxisSpacing: 12,
+                          crossAxisSpacing: 12,
+                          childAspectRatio: 0.72,
                         ),
-                      ),
-                      Positioned.fill(
-                        child: Container(
-                          alignment: Alignment.center,
-                          color: Colors.black.withValues(alpha: 0.15),
-                          child: Card(
-                            margin: const EdgeInsets.symmetric(horizontal: 32),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                            child: Padding(
-                              padding: const EdgeInsets.all(20),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.lock_outline, size: 32, color: AppColors.primary),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    '${profiles.length} ${profiles.length == 1 ? 'person likes' : 'people like'} you',
-                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                        itemBuilder: (context, index) => _LikeTile(
+                          profile: list[index],
+                          interactive: interactive,
+                          isRose: roseSenderIds.contains(list[index].id),
+                        ),
+                      );
+
+                  // Premium sees everyone clearly, full stop — no
+                  // separate Rose section needed since nothing's blurred.
+                  if (isPremium) return tileGrid(profiles, interactive: true);
+
+                  return ListView(
+                    children: [
+                      if (roseSenders.isNotEmpty) ...[
+                        const _RoseSectionHeader(),
+                        tileGrid(roseSenders, interactive: true),
+                        if (others.isNotEmpty) ...[
+                          const SizedBox(height: 20),
+                          Text('Everyone else', style: Theme.of(context).textTheme.titleSmall),
+                          const SizedBox(height: 12),
+                        ],
+                      ],
+                      if (others.isNotEmpty)
+                        Stack(
+                          children: [
+                            ImageFiltered(
+                              imageFilter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                              child: tileGrid(others, interactive: false),
+                            ),
+                            Positioned.fill(
+                              child: Container(
+                                alignment: Alignment.center,
+                                color: Colors.black.withValues(alpha: 0.15),
+                                child: Card(
+                                  margin: const EdgeInsets.symmetric(horizontal: 32),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(20),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.lock_outline, size: 32, color: AppColors.primary),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          '${others.length} more ${others.length == 1 ? 'person likes' : 'people like'} you',
+                                          style: const TextStyle(fontWeight: FontWeight.bold),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Upgrade to Premium to see who and match instantly.',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(color: onSurfaceVariant, fontSize: 12),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        FilledButton(
+                                          onPressed: () => context.push('/paywall'),
+                                          child: const Text('Upgrade to Premium'),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Upgrade to Premium to see who and match instantly.',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(color: onSurfaceVariant, fontSize: 12),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  FilledButton(
-                                    onPressed: () => context.push('/paywall'),
-                                    child: const Text('Upgrade to Premium'),
-                                  ),
-                                ],
+                                ),
                               ),
                             ),
-                          ),
+                          ],
                         ),
-                      ),
                     ],
                   );
                 },
@@ -128,10 +154,29 @@ class LikesScreen extends ConsumerWidget {
   }
 }
 
+class _RoseSectionHeader extends StatelessWidget {
+  const _RoseSectionHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Icon(Icons.local_florist, color: Colors.pink, size: 20),
+          SizedBox(width: 6),
+          Text('Sent you a Rose', style: TextStyle(fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+}
+
 class _LikeTile extends ConsumerStatefulWidget {
   final Profile profile;
   final bool interactive;
-  const _LikeTile({required this.profile, required this.interactive});
+  final bool isRose;
+  const _LikeTile({required this.profile, required this.interactive, this.isRose = false});
 
   @override
   ConsumerState<_LikeTile> createState() => _LikeTileState();
@@ -220,6 +265,12 @@ class _LikeTileState extends ConsumerState<_LikeTile> {
               ),
             ),
           ),
+          if (widget.isRose)
+            const Positioned(
+              top: 8,
+              right: 8,
+              child: Icon(Icons.local_florist, color: Colors.pink, size: 20, shadows: [Shadow(blurRadius: 4)]),
+            ),
         ],
       ),
     );

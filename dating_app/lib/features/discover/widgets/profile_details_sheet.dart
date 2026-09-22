@@ -1,8 +1,14 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/geo_distance.dart';
+import '../../../data/models/notification_item.dart';
 import '../../../data/models/profile.dart';
+import '../../likes/providers/likes_providers.dart';
+import '../../notifications/providers/notification_providers.dart';
+import '../providers/discover_providers.dart';
 
 /// Opened by the (i) button on a Discover card: the full profile (all
 /// photos, full bio, every interest) instead of the card's 2-line summary.
@@ -22,13 +28,58 @@ Future<void> showProfileDetailsSheet(BuildContext context, Profile profile) {
   );
 }
 
-class _ProfileDetails extends StatelessWidget {
+class _ProfileDetails extends ConsumerStatefulWidget {
   final Profile profile;
   final ScrollController controller;
   const _ProfileDetails({required this.profile, required this.controller});
 
   @override
+  ConsumerState<_ProfileDetails> createState() => _ProfileDetailsState();
+}
+
+class _ProfileDetailsState extends ConsumerState<_ProfileDetails> {
+  bool _sendingRose = false;
+
+  Future<void> _sendRose() async {
+    setState(() => _sendingRose = true);
+    HapticFeedback.mediumImpact();
+    try {
+      final uid = ref.read(currentUserIdProvider);
+      final social = ref.read(socialRepositoryProvider);
+      final result = await social.sendRose(uid, widget.profile.id);
+      if (!mounted) return;
+      if (result.matched) {
+        HapticFeedback.heavyImpact();
+        ref.read(notificationRepositoryProvider).add(
+              uid,
+              NotificationType.mutualMatch,
+              "It's a match! 🎉",
+              'You and ${widget.profile.name} liked each other. Say hi!',
+            );
+        await showDialog(
+          context: context,
+          builder: (_) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text("It's a Match! 🎉"),
+            content: Text('You and ${widget.profile.name} liked each other.'),
+            actions: [FilledButton(onPressed: () => Navigator.pop(context), child: const Text('Nice!'))],
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Rose sent to ${widget.profile.name} 🌹')));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    } finally {
+      if (mounted) setState(() => _sendingRose = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final profile = widget.profile;
+    final controller = widget.controller;
     final distance = formatDistanceKm(profile.distanceKm);
     final location = [profile.city, profile.country].where((s) => s.isNotEmpty).join(', ');
     final work = profile.profession.isEmpty
@@ -119,6 +170,22 @@ class _ProfileDetails extends StatelessWidget {
           const SizedBox(height: 16),
           _PromptCard(prompt: prompt),
         ],
+        const SizedBox(height: 20),
+        Consumer(
+          builder: (context, ref, _) {
+            final rosesLeft = ref.watch(rosesLeftTodayProvider);
+            final canSend = rosesLeft > 0 && !_sendingRose;
+            return OutlinedButton.icon(
+              onPressed: canSend ? _sendRose : null,
+              icon: _sendingRose
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.local_florist, color: Colors.pink),
+              label: Text(
+                rosesLeft > 0 ? 'Send a Rose ($rosesLeft left today)' : "You're out of Roses for today",
+              ),
+            );
+          },
+        ),
       ],
     );
   }
